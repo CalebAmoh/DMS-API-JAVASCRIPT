@@ -1,0 +1,98 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+//database connection
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+//users model
+model users {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  username String
+  userRole String
+  phone    String @unique
+  email    String @unique
+  password String
+}
+
+//logged in users model
+model loggedInUsers {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique
+}
+
+//news model
+model news {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  message          String
+  postedBy         String
+  approvalStatus   String
+  addedTime        String
+  approvedBy       String   @default("null")
+  rejectedBy       String   @default("null")
+  updatedBy        String   @default("null")
+  createdAt        DateTime @default(now())
+  category         String
+  rejectedReason   String   @default("null")
+  trending         Boolean
+  views            Int
+  bannerImageUrl   String
+  imageContent1Url String[]
+  source           String
+}
+
+//external_news_source
+model external_news_source {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  message          String
+  postedBy         String
+  approvalStatus   String
+  addedTime        String
+  approvedBy       String   @default("null")
+  rejectedBy       String   @default("null")
+  updatedBy        String   @default("null")
+  createdAt        DateTime @default(now())
+  category         String
+  rejectedReason   String   @default("null")
+  trending         Boolean
+  views            Int
+  bannerImageUrl   String
+  imageContent1Url String[]
+  source           String
+}
+
+model categories {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  name     String @unique
+  postedBy String
+}
+
+model intro {
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  introMessage String
+}
+
+model outSourceNews {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  message          String
+  postedBy         String
+  addedTime        String
+  url              String
+  bannerImageUrl   String
+  imageContent1Url String[]
+  source           String
+}
+
+model messages {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  message  String
+  type     String
+  postedBy String
+}
