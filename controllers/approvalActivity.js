@@ -548,10 +548,115 @@ const approveDoc = async (req, res) => {
   }
 };
 
+/**
+ * Rejects a document based on its ID and updates approval status
+ * @param {Object} req - Request object containing docId, userId and remarks
+ * @param {Object} res - Response object
+ * @returns {Object} JSON response with rejection status
+ */
+const rejectDoc = async (req, res) => {
+  try {
+    const { docId, userId, remarks } = req.body.data;
+    // Validate required parameters
+    if (!docId || !userId) {
+      return res.status(400).json({
+        message: "Missing required parameters",
+        code: "400"
+      });
+    }
+
+    // First query to get current document status and approval stage
+    const getDocQuery = `
+      SELECT rd.*, rd.approval_stage 
+      FROM request_documents rd 
+      WHERE rd.id = ?`;
+
+    pool.getConnection((err, connection) => {
+      if (err) {
+        console.error("Error getting connection from pool:", err);
+        return res.status(500).json({ 
+          message: "Database connection failed",
+          code: "500"
+        });
+      }
+
+      connection.query(getDocQuery, [docId], (err, docResults) => {
+        if (err) {
+          connection.release();
+          console.error("Error fetching document:", err);
+          return res.status(500).json({ 
+            message: "Failed to fetch document details",
+            code: "500"
+          });
+        }
+
+        if (!docResults.length) {
+          connection.release();
+          return res.status(404).json({ 
+            message: "Document not found",
+            code: "404"
+          });
+        }
+
+        const currentApprovalStage = docResults[0].approval_stage;
+
+        // Insert rejection record with current approval stage
+        const approvalQuery = `
+          INSERT INTO approval_activities 
+          (doc_id, approved_by, comment, approval_stage) 
+          VALUES (?, ?, ?, ?)`;
+
+        connection.query(approvalQuery, [docId, userId, remarks, currentApprovalStage], (err, approvalResult) => {
+          if (err) {
+            connection.release();
+            console.error("Error recording rejection:", err);
+            return res.status(500).json({ 
+              message: "Failed to record rejection",
+              code: "500"
+            });
+          }
+
+          // Update document status and reset approvers
+          const updateDocQuery = `
+            UPDATE request_documents 
+            SET status = 'REJECTED',
+                current_approvers = 0,
+                is_required_approvers_left = 0
+            WHERE id = ?`;
+
+          connection.query(updateDocQuery, [docId], (err, updateResult) => {
+            connection.release();
+            
+            if(err) {
+              console.error("Update error:", err);
+              return res.status(500).json({ 
+                message: "Failed to update document status",
+                code: "500"
+              });
+            }
+
+            res.status(200).json({
+              message: "Document rejected successfully",
+              code: "200"
+            });
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Unexpected error in rejectDoc:", error);
+    res.status(500).json({
+      message: "An unexpected error occurred",
+      code: "500"
+    });
+  }    
+}
+
 module.exports = {
 	getSubmittedDocs,
   getPendingDocs,
   approveDoc,
-    testSpeed
+  rejectDoc,
+  testSpeed
 	// other controller functions if any
 };

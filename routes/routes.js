@@ -54,6 +54,7 @@ router.get("/get-approver-users", approverSetupController.getApproverUsers);
 router.get("/get-submitted-docs", approvalActivityController.getSubmittedDocs);
 router.post("/get-pending-docs", approvalActivityController.getPendingDocs);
 router.put("/approve-doc", approvalActivityController.approveDoc);
+router.put("/reject-doc", approvalActivityController.rejectDoc);
 
 //dashboard
 router.get("/get-dashbaord-stats", dashboardController.getDashboardValues);
