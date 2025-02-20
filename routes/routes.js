@@ -1,6 +1,6 @@
 const express = require("express"); //import express
 const router = express.Router(); //create express router
-const { checkApiKey } = require("../middleware/authMiddleware");
+const { checkToken,handleRefreshToken } = require("../middleware/authMiddleware");
 const userController = require("../controllers/users"); //users controller
 const newsController = require("../controllers/news.js"); //news controller
 const parameterController = require("../controllers/parameters.js"); //news controller
@@ -11,13 +11,7 @@ const accountController = require("../controllers/accountSetup.js");
 
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() }); // Set the destination folder for uploaded files
-// const addNewsMiddleware = upload.fields([
-// 	{ name: "bannerImage", maxCount: 1 },
-// 	{ name: "imageContent1", maxCount: 6 }
-// 	// { name: "imageContent2", maxCount: 1 }
-// ]); //
 
-router.use(checkApiKey);
 
 //index route just for testing
 //returns hello world
@@ -28,10 +22,13 @@ router.get("/", (req, res) => {
 /*******************************************
 * AUTH ROUTES
 *****************************************/
+//group all user routes together to checkToken
 
 //user registration route to register users
-router.post("/register", userController.register);
 router.post("/login", userController.login);
+router.get("/refresh-token", handleRefreshToken);
+router.use(checkToken);
+router.post("/register", userController.register);
 router.get("/get-users-:user_id", userController.getUsers);
 router.post("/delete-user", userController.deleteUser);
 router.post("/logout", userController.logoutUser);

@@ -4,7 +4,10 @@ const bcrypt = require("bcrypt"); //import bcrypt for hashing
 const saltRounds = 10; //the number of time the password will be hashed with a unique salt{unique number}
 const loggedInUsersCollection = "loggedInUsers";
 const usersCollection = "users";
+const passwordResetTokenCollection = "password_reset_tokens";
 const pool = require("../mysqlconfig");
+const jwt = require("jsonwebtoken");
+require("dotenv").config();
 
 /***********************************************************************************************************
  * usercontroller handles all user creation and authentication and any other user-related activity in the app
@@ -30,102 +33,65 @@ const register = async (req, res) => {
 		// Access and validate data from the request body
 		const { employee_id, first_name, last_name, email, rank, phone, status, role, posted_by } = req.body;
 
-		// Get a connection from the pool
-		pool.getConnection((err, connection) => {
-			if (err) {
-				console.error("Error getting connection from pool: ", err);
-				return res.status(500).json({ message: "Database connection failed." });
-			}
+		console.log(req.body);
 
-			// Check if user is already registered
-			const employeeCheckQuery = `SELECT * from users where employee_id = ?;`;
+		// Pass data entry into array
+		const dataEntry = [
+			{ name: "employee id", value: employee_id },
+			{ name: "firstname", value: first_name },
+			{ name: "last name", value: last_name },
+			{ name: "email", value: email },
+			{ name: "phone", value: phone },
+			{ name: "user role", value: role },
+			{ name: "status", value: status },
+			{ name: "posted by", value: posted_by },
+		];
 
-			connection.query(employeeCheckQuery, [employee_id], async (err, result) => {
-				if (err) {
-					connection.release();
-					console.error("Error checking employee:", err);
-					return res.status(500).json({ result: "An error occurred, see logs for details", code: "500" });
-				}
+		// Check for null or empty values from data entry
+		const result = helper.checkForNullOrEmpty(dataEntry);
 
-				if (result.length > 0) {
-					connection.release();
-					return res.status(400).json({ result: "user already registered", code: "400" });
-				}
+		if (result.status !== "success") {
+			return res.status(203).json({ result: result.message, code: "203" });
+		}
 
-				try {
-					// Pass data entry into array
-					const dataEntry = [
-						{ name: "employee id", value: employee_id },
-						{ name: "firstname", value: first_name },
-						{ name: "last name", value: last_name },
-						{ name: "email", value: email },
-						{ name: "phone", value: phone },
-						{ name: "user role", value: role },
-						{ name: "status", value: status },
-						{ name: "posted by", value: posted_by },
-					];
+		
+		// Check for unique values
+		const isUnique = await helper.checkUniqueColumn(usersCollection, [{"phone":phone},{"email": email}, {"employee_id": employee_id}]);
+		console.log("isUnique", isUnique.message);
+		if (isUnique.status === "error") {
+			return res.status(409).json({ result: isUnique.message, code: "409" });
+		}
 
-					// Check for null or empty values from data entry
-					const result = helper.checkForNullOrEmpty(dataEntry);
 
-					if (result.status !== "success") {
-						connection.release();
-						return res.status(400).json({ result: result.message, code: "400" });
-					}
+		const password = "pass1234";
 
-					// Check phone number uniqueness
-					const isPhoneUnique = await helper.checkUniqueColumn(usersCollection, "phone", phone);
-					if (isPhoneUnique.status === "error") {
-						connection.release();
-						return res.status(400).json({ result: isPhoneUnique.message, code: "400" });
-					}
-
-					// Check email uniqueness
-					const isEmailUnique = await helper.checkUniqueColumn(usersCollection, "email", email);
-					if (isEmailUnique.status === "error") {
-						connection.release();
-						return res.status(400).json({ result: isEmailUnique.message, code: "400" });
-					}
-
-					const password = "pass1234";
-
-					// Encrypt password
-					const hashedPassword = await new Promise((resolve, reject) => {
-						bcrypt.hash(password, saltRounds, (err, hash) => {
-							if (err) reject(err);
-							else resolve(hash);
-						});
-					});
-
-					// Insert user into the database
-					const data = {
-						employee_id,
-						first_name,
-						last_name,
-						email,
-						password: hashedPassword,
-						posted_by
-					};
-
-					const insertUser = await helper.dynamicInsert(usersCollection, data);
-					connection.release();
-
-					if (insertUser.status === "error") {
-						return res.status(400).json({ result: insertUser.message, code: "400" });
-					}
-
-					return res.status(200).json({ result: "User registered successfully", code: "200" });
-
-				} catch (error) {
-					connection.release();
-					console.error("Error during registration process:", error);
-					return res.status(500).json({
-						result: "An error occurred during registration process",
-						code: "500"
-					});
-				}
+		// Encrypt password
+		const hashedPassword = await new Promise((resolve, reject) => {
+			bcrypt.hash(password, saltRounds, (err, hash) => {
+				if (err) reject(err);
+				else resolve(hash);
 			});
 		});
+
+		// Insert user into the database
+		const data = {
+			employee_id,
+			first_name,
+			last_name,
+			phone,
+			email,
+			password: hashedPassword,
+			posted_by
+		};
+
+		const insertUser = await helper.dynamicInsert(usersCollection, data);
+
+		if(insertUser.status === "success") {
+			return res.status(200).json({ result: "User registered successfully", code: "200" });
+		}else{
+			console.log("Error inserting user:", insertUser.message);
+			return res.status(400).json({ result: "An error occurred, see logs for details", code: "400" });
+		}
 
 	} catch (error) {
 		console.error("Error during registration:", error);
@@ -151,60 +117,56 @@ const login = async (req, res) => {
 		//check for null or empty values from data entry
 		const result = helper.checkForNullOrEmpty(dataEntry);
 
-		//if check is successful get the user's encrypted password and compare
-		//with the incoming one like shatta wale's track1
+		//if check is successful get the user's encrypted password and compare with the incoming password
 		if (result.status === "success") {
 			//retrieve user with that email
-			const userQuery = await prisma[usersCollection].findUnique({
-				where: {
-					email: email
-				}
-			});
+			const userQuery = await helper.selectRecordsWithCondition(usersCollection, [{ email: email }]);
+			if (userQuery.status === "success") {
+				const userPassowrd = userQuery.message[0].password;
 
-			//if the user exist
-			if (!userQuery) {
-				res.status(400).json({ result: "no user found", code: "200" });
-				return;
-			}
+				//check if the password is correct
+				const result = await bcrypt.compare(password, userPassowrd);
+				if (result) {
 
-			if (await helper.getObjectById(loggedInUsersCollection, userQuery.id)) {
-				res.status(200).json({ result: "user already logged in", code: "200" });
-				return;
-			}
+					//generate token
+					const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "40s" });
+					const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "1h" });
 
-			//go ahead and authenticate the user
-			//compare the incoming password to the password we have stored in the database
-			const result = await bcrypt.compare(password, userQuery.password);
-			if (result) {
-				const isLoggedIn = await prisma[loggedInUsersCollection].create({
-					data: {
-						userId: userQuery.id
+					//save the token in the database
+					const data = {
+						email: userQuery.message[0].email,
+						token: refreshToken
+					};
+
+					const insertToken = await helper.dynamicInsert(passwordResetTokenCollection, data);
+
+					if(insertToken.status === "success") {
+						console.log("Token inserted successfully");
+						res.cookie("refreshToken", refreshToken, { httpOnly: true , maxAge: 24*60*60*1000});
+						res.status(200).json({
+							result: "User authenticated successfully",
+							user: userQuery.message,
+							accessToken: accessToken,
+							code: "200"
+						});
+					}else{
+						console.log("Error inserting token:", insertToken.message);
+						res.status(400).json({
+							result: "An error occurred, see logs for details",
+							code: "400"
+						});
 					}
-				});
-
-				if (!isLoggedIn) {
-					res.status(400).json({
-						result: "an error occured while logging please try again"
+				} else {
+					res.status(401).json({
+						result: "Password or email is incorrect",
+						code: "401"
 					});
-					return;
 				}
-
-				res.status(200).json({
-					result: "User authenticated successfully",
-					user: {
-						username: userQuery.username,
-						user_role: userQuery.userRole,
-						user_id: userQuery.id
-					},
-					code: "200"
-				});
-			} else {
-				res.status(400).json({
-					result: "Password or email is incorrect",
-					code: "400"
-				});
-				return;
+			}else{
+				res.status(401).json({ result: userQuery.message, code: "401" });
 			}
+
+
 		} else {
 			res.status(400).json({ result: result.message, code: "400" });
 		}
@@ -216,6 +178,41 @@ const login = async (req, res) => {
 		});
 	}
 };
+
+const logout = async (req, res) => {
+	try {
+		const cookies = req.cookies;
+		!cookies?.refreshToken && res.status(204).json({ error: "No Content" });
+
+		refreshToken = cookies.refreshToken;
+
+		//select refresh token from db 
+		const user = await helper.selectRecordsWithCondition(passwordResetTokenCollection, [{token: refreshToken}]);
+		if (user.status === "success" ){
+			const userToken = user.message[0].token;
+			const email = user.message[0].email;
+
+			//compare the token from the db with the token in the cookie to ensure they are the same token 
+			userToken !== refreshToken && res.status(401).json({ error: "Unauthorized" });
+
+			//verify the token
+			jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+				if (err || user.email !== email) {
+					return res.status(403).json({ error: "Forbidden" });
+				}
+
+				accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "40s" });
+				res.json({ accessToken });
+			});
+		}else{
+			res.clearCookie("refreshToken",maxAge=0);
+			res.status(403).json({ result: user.message, code: "403" });
+		}
+	} catch (error) {
+		console.log(error);
+		res.status(400).json({ error: "Internal Server Error"})
+	}
+}
 
 //handles getting all users
 const getUsers = async (req, res) => {
@@ -586,51 +583,7 @@ const getUser = async (req, res) => {
 	}
 };
 
-//checks for unique email
-const checkForUniqueEmail = async email => {
-	try {
-		//if the collection does not exist return true
 
-		// if (await helper.isCollectionEmpty(usersCollection)) {
-		// 	return true;
-		// }
-
-		const isemailUnique = await prisma.users.findUnique({
-			where: {
-				email: email
-			}
-		});
-
-		if (isemailUnique) {
-			return false;
-		} else {
-			return true;
-		}
-	} catch (error) {
-		console.error("Error checking email uniqueness:", error);
-		throw error; // Propagate the error to the caller
-	}
-};
-
-//checks for unique phone
-const checkForUniquePhone = async phone => {
-	try {
-		const isPhoneUnique = await prisma[usersCollection].findUnique({
-			where: {
-				phone: phone
-			}
-		});
-
-		if (isPhoneUnique) {
-			return false;
-		} else {
-			return true;
-		}
-	} catch (error) {
-		console.error("Error checking phone uniqueness:", error);
-		throw error; // Propagate the error to the caller
-	}
-};
 
 
 
