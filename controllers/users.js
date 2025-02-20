@@ -4,9 +4,11 @@ const bcrypt = require("bcrypt"); //import bcrypt for hashing
 const saltRounds = 10; //the number of time the password will be hashed with a unique salt{unique number}
 const loggedInUsersCollection = "loggedInUsers";
 const usersCollection = "users";
+const rolesCollection = "roles";
 const passwordResetTokenCollection = "password_reset_tokens";
 const pool = require("../mysqlconfig");
 const jwt = require("jsonwebtoken");
+const { refreshToken } = require("firebase-admin/app");
 require("dotenv").config();
 
 /***********************************************************************************************************
@@ -41,7 +43,7 @@ const register = async (req, res) => {
 			{ name: "firstname", value: first_name },
 			{ name: "last name", value: last_name },
 			{ name: "email", value: email },
-			{ name: "phone", value: phone },
+			// { name: "phone", value: phone },
 			{ name: "user role", value: role },
 			{ name: "status", value: status },
 			{ name: "posted by", value: posted_by },
@@ -81,13 +83,35 @@ const register = async (req, res) => {
 			phone,
 			email,
 			password: hashedPassword,
-			posted_by
+			posted_by,
+			status
 		};
 
 		const insertUser = await helper.dynamicInsert(usersCollection, data);
 
 		if(insertUser.status === "success") {
-			return res.status(200).json({ result: "User registered successfully", code: "200" });
+			// Insert user role into the database
+			const getUser = await helper.selectRecordsWithCondition(usersCollection, [{ email: email }]);
+			const userId = getUser.message[0].id;
+
+			const getRole = await helper.selectRecordsWithCondition(rolesCollection,[{name: role}]);
+			const roleId = getRole.message[0].id;
+
+			//role data
+			const roleData = {
+				role_id: roleId,
+				model_id: userId,
+				"model_type":"App\Models\User"
+			};
+
+			const insertUserRole = await helper.dynamicInsert("model_has_roles", roleData);
+
+			if(insertUserRole.status === "success"){
+				 res.status(200).json({ result: "User registered successfully", code: "200" });
+			}else{
+				res.status(203).json({result:insertUserRole.message, code:"203"});
+			}
+
 		}else{
 			console.log("Error inserting user:", insertUser.message);
 			return res.status(400).json({ result: "An error occurred, see logs for details", code: "400" });
@@ -129,7 +153,7 @@ const login = async (req, res) => {
 				if (result) {
 
 					//generate token
-					const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "40s" });
+					const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
 					const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "1h" });
 
 					//save the token in the database
@@ -142,7 +166,7 @@ const login = async (req, res) => {
 
 					if(insertToken.status === "success") {
 						console.log("Token inserted successfully");
-						res.cookie("refreshToken", refreshToken, { httpOnly: true , maxAge: 24*60*60*1000});
+						res.cookie("refreshToken", refreshToken, { httpOnly: true , sameSite:'None',secure:true, maxAge: 24*60*60*1000});
 						res.status(200).json({
 							result: "User authenticated successfully",
 							user: userQuery.message,
@@ -182,31 +206,30 @@ const login = async (req, res) => {
 const logout = async (req, res) => {
 	try {
 		const cookies = req.cookies;
-		!cookies?.refreshToken && res.status(204).json({ error: "No Content" });
+		!cookies?.refreshToken && res.status(401).json({ error: "No Content" });
 
-		refreshToken = cookies.refreshToken;
+		const refreshToken = cookies.refreshToken;
 
 		//select refresh token from db 
-		const user = await helper.selectRecordsWithCondition(passwordResetTokenCollection, [{token: refreshToken}]);
+		data = {token: refreshToken}
+		const user = await helper.selectRecordsWithCondition(passwordResetTokenCollection, [data]);
 		if (user.status === "success" ){
-			const userToken = user.message[0].token;
-			const email = user.message[0].email;
+			//delete the refresh token from db
+			const deleted = await helper.deleteRecordsWithCondition(passwordResetTokenCollection, [data]);
+			if (deleted.status === "success") {
+				res.clearCookie("refreshToken",{httpOnly:true,sameSite:'None',secure:true});
+				res.status(200).json({ status: "success", message: "User logged out successfully" });
+			}else{
+				//delete failed
+				console.log(deleted.message);
+				res.status(500).json({ error: "Internal Server Error" });
+			}
 
-			//compare the token from the db with the token in the cookie to ensure they are the same token 
-			userToken !== refreshToken && res.status(401).json({ error: "Unauthorized" });
-
-			//verify the token
-			jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
-				if (err || user.email !== email) {
-					return res.status(403).json({ error: "Forbidden" });
-				}
-
-				accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "40s" });
-				res.json({ accessToken });
-			});
 		}else{
-			res.clearCookie("refreshToken",maxAge=0);
-			res.status(403).json({ result: user.message, code: "403" });
+			console.log(user.message);
+			res.clearCookie("refreshToken",{httpOnly:true,sameSite:'None',secure:true});
+			res.sendStatus(403)
+			// .json({ result: user.message, code: "403" });
 		}
 	} catch (error) {
 		console.log(error);
@@ -217,38 +240,27 @@ const logout = async (req, res) => {
 //handles getting all users
 const getUsers = async (req, res) => {
 	try {
-		// Get the user making the request
-		const userId = req.params.user_id;
+		// Query to get all users with their roles and formatted status
+		const query = `
+			SELECT u.*, r.name as role,
+				CASE 
+					WHEN u.status = 1 THEN 'Active'
+					WHEN u.status = 0 THEN 'Inactive'
+					ELSE u.status 
+				END as status
+			FROM users u
+			JOIN model_has_roles mhr ON u.id = mhr.model_id
+			JOIN roles r ON mhr.role_id = r.id`;
 
-		// Check if the user is already logged in
-		if (!await helper.isAuthUser(userId)) {
-			res.status(400).json({ result: "Unauthenticated User", code: "400" });
-			return;
+	    //get records
+		const users = await helper.selectRecordsWithQuery(query);
+		if(users.status === "success"){
+			res.status(200).json({results:users.data, code:"200"});
+		}else{
+			console.log("Error retrieving users:", users.message);
+			res.status(400).json({result:users.message, code:"400"});
 		}
-
-		// Pass data entry into an array
-		const dataEntry = [{ name: "posted by", value: userId }];
-
-		// Check for null or empty values from data entry
-		const result = helper.checkForNullOrEmpty(dataEntry);
-
-		// If check is successful, retrieve users from the database
-		if (result.status === "success") {
-			// Retrieve users from the database
-			const allUsers = await prisma[usersCollection].findMany();
-
-			// Log the retrieved users
-			console.log("All users:", allUsers);
-
-			// Send the response with the retrieved users
-			res.status(200).json({
-				result: "All Users retrieved",
-				users: allUsers,
-				code: "200"
-			});
-		} else {
-			res.status(400).json({ result: result.message, code: "400" });
-		}
+		
 	} catch (error) {
 		console.error("Error retrieving users:", error);
 		res.status(500).json({ result: "Internal server error", code: "500" });
@@ -517,6 +529,7 @@ const changeUserPassword = async (req, res) => {
 	}
 };
 
+//get a single user
 const getUser = async (req, res) => {
 	try {
 		//get data from request
@@ -583,6 +596,23 @@ const getUser = async (req, res) => {
 	}
 };
 
+//get all user roles
+const getUserRoles = async (req, res) => {
+	try {
+		const query = `select * from roles`;
+		const roles = await helper.selectRecordsWithQuery(query);
+
+		if(roles.message = "success"){
+			res.status(200).json({results:roles.data, code:"200"});
+		}else{
+			res.status(203).json({results:roles.message, code:"203"});
+		}
+	} catch (error) {
+		console.log(error);
+		res.status(500).json({results:"An error occurred check logs", code:"500"})
+	}
+}
+
 
 
 
@@ -590,11 +620,13 @@ const getUser = async (req, res) => {
 module.exports = {
 	register,
 	login,
+	logout,
 	getUsers,
 	deleteUser,
 	logoutUser,
 	updateUser,
 	changeUserPassword,
-	getUser
+	getUser,
+	getUserRoles
 	// other controller functions if any
 };

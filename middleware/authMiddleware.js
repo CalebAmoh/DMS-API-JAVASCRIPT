@@ -21,8 +21,8 @@ function checkApiKey(req, res, next) {
 
 const checkToken = (req, res, next) => {
 	try {
-		const token = req.headers["authorization"];
-		if (!token) {
+		const token = req.headers.authorization || req.headers.Authorization;
+		if (!token?.startsWith("Bearer ")) {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
 		
@@ -33,7 +33,7 @@ const checkToken = (req, res, next) => {
 				return res.status(403).json({ error: "Forbidden" });
 			}
 
-			console.log(user);
+			// console.log(user);
 			req.email = user.email;
 			next();
 		});
@@ -64,10 +64,11 @@ const handleRefreshToken = async (req, res) => {
 			//verify the token
 			jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
 				if (err || user.email !== email) {
-					return res.status(403).json({ error: "Forbidden" });
+					console.log(err);
+					return res.status(403).json({ error: "Forbidden 11" });
 				}
 
-				accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "40s" });
+				accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
 				res.json({ accessToken });
 			});
 		}else{

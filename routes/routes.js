@@ -25,13 +25,16 @@ router.get("/", (req, res) => {
 //group all user routes together to checkToken
 
 //user registration route to register users
-router.post("/login", userController.login);
-router.get("/refresh-token", handleRefreshToken);
+router.post("/user/login", userController.login);
+router.get("/user/logout", userController.logout);
+router.get("/user/refresh-token", handleRefreshToken);
+
 router.use(checkToken);
-router.post("/register", userController.register);
-router.get("/get-users-:user_id", userController.getUsers);
+router.post("/user/register", userController.register);
+router.get("/get-users", userController.getUsers);
+router.get("/get-users-roles", userController.getUserRoles);
 router.post("/delete-user", userController.deleteUser);
-router.post("/logout", userController.logoutUser);
+router.post("/user/logout", userController.logoutUser);
 router.post("/update-user", userController.updateUser);
 router.post("/update-password", userController.changeUserPassword);
 router.post("/get-user", userController.getUser);

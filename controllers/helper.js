@@ -383,12 +383,73 @@ const deleteRecordsWithCondition = async (tableName, conditions) => {
 	}
 };
 
+/**
+ * Execute a custom SELECT query and return the results
+ * @param {string} query - The SQL query to execute
+ * @param {Array} params - Array of parameter values for the query (optional)
+ * @returns {Promise<Object>} Object containing status, message and the retrieved records
+ */
+const selectRecordsWithQuery = async (query, params = []) => {
+	try {
+		return new Promise((resolve, reject) => {
+			pool.getConnection((err, connection) => {
+				if (err) {
+					console.error("Error getting connection from pool:", err);
+					reject({
+						status: "error",
+						message: "Database connection failed",
+						error: err.message
+					});
+					return;
+				}
+
+				connection.query(query, params, (err, results) => {
+					connection.release();
+
+					if (err) {
+						console.error("Error executing select query:", err);
+						reject({
+							status: "error",
+							message: "Failed to execute query",
+							error: err.message
+						});
+						return;
+					}
+
+					if (results.length === 0) {
+						resolve({
+							status: "success",
+							message: "No records found",
+							data: []
+						});
+					} else {
+						resolve({
+							status: "success",
+							message: "Records retrieved successfully",
+							data: results,
+							count: results.length
+						});
+					}
+				});
+			});
+		});
+	} catch (error) {
+		console.error("Error in selectRecordsWithQuery:", error);
+		throw {
+			status: "error",
+			message: "Failed to execute query",
+			error: error.message
+		};
+	}
+};
+
 module.exports = {
 	checkForNullOrEmpty,
 	checkUniqueColumn,
 	isAuthUser,
 	selectRecordsWithCondition,
 	deleteRecordsWithCondition,
-	dynamicInsert
+	dynamicInsert,
+	selectRecordsWithQuery
 	// other controller functions if any
 };
