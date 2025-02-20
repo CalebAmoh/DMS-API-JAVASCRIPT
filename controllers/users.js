@@ -27,109 +27,109 @@ const pool = require("../mysqlconfig");
 //handles the registration of users in the system
 const register = async (req, res) => {
 	try {
-
 		// Access and validate data from the request body
-		const { employee,first_name,last_name,email,rank,phone,status,role,postedBy } = req.body;
+		const { employee_id, first_name, last_name, email, rank, phone, status, role, posted_by } = req.body;
 
 		// Get a connection from the pool
-        pool.getConnection((err, connection) => {
+		pool.getConnection((err, connection) => {
 			if (err) {
-			  console.error("Error getting connection from pool: ", err);
-			  res.status(500).json({ message: "Database connection failed." });
-			  return;
+				console.error("Error getting connection from pool: ", err);
+				return res.status(500).json({ message: "Database connection failed." });
 			}
 
-			//check if user is already logged in
-			const employeeCheckQuery = `SELECT * from users where id = ?;`
+			// Check if user is already registered
+			const employeeCheckQuery = `SELECT * from users where employee_id = ?;`;
 
-			connection.query(employeeCheckQuery, [employee], (err, result) => {
+			connection.query(employeeCheckQuery, [employee_id], async (err, result) => {
 				if (err) {
+					connection.release();
 					console.error("Error checking employee:", err);
-					res.status(500).json({ result: "An error occurred, see logs for details", code: "500" });
-					return;
+					return res.status(500).json({ result: "An error occurred, see logs for details", code: "500" });
 				}
 
 				if (result.length > 0) {
-					res.status(400).json({ result: "user already registered", code: "400" });
-					return;
+					connection.release();
+					return res.status(400).json({ result: "user already registered", code: "400" });
+				}
+
+				try {
+					// Pass data entry into array
+					const dataEntry = [
+						{ name: "employee id", value: employee_id },
+						{ name: "firstname", value: first_name },
+						{ name: "last name", value: last_name },
+						{ name: "email", value: email },
+						{ name: "phone", value: phone },
+						{ name: "user role", value: role },
+						{ name: "status", value: status },
+						{ name: "posted by", value: posted_by },
+					];
+
+					// Check for null or empty values from data entry
+					const result = helper.checkForNullOrEmpty(dataEntry);
+
+					if (result.status !== "success") {
+						connection.release();
+						return res.status(400).json({ result: result.message, code: "400" });
+					}
+
+					// Check phone number uniqueness
+					const isPhoneUnique = await helper.checkUniqueColumn(usersCollection, "phone", phone);
+					if (isPhoneUnique.status === "error") {
+						connection.release();
+						return res.status(400).json({ result: isPhoneUnique.message, code: "400" });
+					}
+
+					// Check email uniqueness
+					const isEmailUnique = await helper.checkUniqueColumn(usersCollection, "email", email);
+					if (isEmailUnique.status === "error") {
+						connection.release();
+						return res.status(400).json({ result: isEmailUnique.message, code: "400" });
+					}
+
+					const password = "pass1234";
+
+					// Encrypt password
+					const hashedPassword = await new Promise((resolve, reject) => {
+						bcrypt.hash(password, saltRounds, (err, hash) => {
+							if (err) reject(err);
+							else resolve(hash);
+						});
+					});
+
+					// Insert user into the database
+					const data = {
+						employee_id,
+						first_name,
+						last_name,
+						email,
+						password: hashedPassword,
+						posted_by
+					};
+
+					const insertUser = await helper.dynamicInsert(usersCollection, data);
+					connection.release();
+
+					if (insertUser.status === "error") {
+						return res.status(400).json({ result: insertUser.message, code: "400" });
+					}
+
+					return res.status(200).json({ result: "User registered successfully", code: "200" });
+
+				} catch (error) {
+					connection.release();
+					console.error("Error during registration process:", error);
+					return res.status(500).json({
+						result: "An error occurred during registration process",
+						code: "500"
+					});
 				}
 			});
 		});
 
-		
-		
-
-		//pass data entry into array
-		const dataEntry = [
-			{ name: "firstname", value: first_name },
-			{ name: "last_name", value: last_name },
-			{ name: "email", value: email },
-			{ name: "phone", value: phone },
-			{ name: "user role", value: role },
-			{ name: "status", value: status },
-			{ name: "posted by", value: postedBy },
-		];
-
-		//check for null or empty values from data entry
-		const result = helper.checkForNullOrEmpty(dataEntry);
-
-		//if check is successful hash the user password and insert data into database
-		if (result.status === "success") {
-			
-			//check phone number uniqueness
-			const isPhoneUnique = await helper.checkUniqueColumn("usersCollection", "phone",phone);
-			if(isPhoneUnique.status === "error"){
-				res.status(400).json({ result: isPhoneUnique.message, code: "400" });
-				return;
-			}
-
-			//check email uniqueness
-			const isEmailUnique = await helper.checkUniqueColumn("usersCollection", "email",email);
-			if(isEmailUnique.status === "error"){
-				res.status(400).json({ result: isEmailUnique.message, code: "400" });
-				return;
-			}
-
-			const password = "pass1234"
-
-			//encrypt password before you save in the database
-			const hashedPassword = await new Promise((resolve, reject) => {
-				bcrypt.hash(password, saltRounds, (err, hash) => {
-					if (err) {
-						reject(err);
-					} else {
-						resolve(hash);
-					}
-				});
-			});
-
-			//insert user into the database
-
-			const data = {
-				employee_id: employee,
-				first_name: first_name,
-				last_name: last_name,
-				email: email,
-				password: hashedPassword,
-			}
-			const insertUser = await helper.dynamicInsert(usersCollection, data);
-
-			if(insertUser.status === "error"){
-				res.status(400).json({ result: insertUser.message, code: "400" });
-				return;
-			}else{
-				res.status(200).json({ result: "User registered successfully", code: "200" });
-			}
-			
-			
-		} else {
-			// console.log(result.message);
-			res.status(400).json({ result: result.message, code: "400" });
-		}
 	} catch (error) {
 		console.error("Error during registration:", error);
-
-		res.status(500).json({
+		return res.status(500).json({
 			result: "An error occurred, see logs for details",
 			code: "500"
 		});
