@@ -218,7 +218,7 @@ const selectRecordsWithCondition = async (tableName, columns) => {
 						connection.release();
 						resolve({
 							status: "success",
-							message: data
+							data: data
 						});
 					}
 				});

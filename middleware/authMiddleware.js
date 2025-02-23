@@ -3,6 +3,7 @@ const apiKey = process.env.API_KEY;
 const jwt = require("jsonwebtoken");
 const helper = require("../controllers/helper");
 const { access } = require('fs');
+const { refreshToken } = require('firebase-admin/app');
 const passwordResetTokenCollection = "password_reset_tokens";
 
 function checkApiKey(req, res, next) {
@@ -48,30 +49,41 @@ const handleRefreshToken = async (req, res) => {
 
 	try {
 		const cookies = req.cookies;
+		console.log("refresh token", cookies);
 		!cookies?.refreshToken && res.status(401).json({ error: "Unauthorized" });
 
-		refreshToken = cookies.refreshToken;
+
+		const refreshToken = cookies.refreshToken;
 
 		//select refresh token from db 
 		const user = await helper.selectRecordsWithCondition(passwordResetTokenCollection, [{token: refreshToken}]);
 		if (user.status === "success" ){
-			const userToken = user.message[0].token;
-			const email = user.message[0].email;
+			const userToken = user.data[0].token;
+			const email = user.data[0].email;
 
 			//compare the token from the db with the token in the cookie to ensure they are the same token 
 			userToken !== refreshToken && res.status(401).json({ error: "Unauthorized" });
+
+			const query = `SELECT * FROM users u JOIN model_has_roles m ON u.id = m.model_id JOIN roles r ON r.id = m.role_id WHERE u.email = '${email}';`
+				
+			const userDetails = await helper.selectRecordsWithQuery(query);
 
 			//verify the token
 			jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
 				if (err || user.email !== email) {
 					console.log(err);
-					return res.status(403).json({ error: "Forbidden 11" });
+					return res.status(403).json({ error: "Forbidden" });
 				}
 
-				accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
-				res.json({ accessToken });
+				if(userDetails.status === "success"){
+					accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
+					res.json({ accessToken,user: userDetails.data });
+				}else{
+					return res.status(403).json({ error: "Forbidden" });
+				}
 			});
 		}else{
+			console.log("user in refresh",user);
 			res.status(403).json({ result: user.message, code: "403" });
 		}
 	} catch (error) {

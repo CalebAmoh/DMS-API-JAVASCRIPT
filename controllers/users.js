@@ -131,7 +131,7 @@ const login = async (req, res) => {
 	try {
 		// Access data from the request body
 		const { email, password } = req.body;
-
+		console.log(req.body);
 		//pass data entry into array
 		const dataEntry = [
 			{ name: "email", value: email },
@@ -146,39 +146,46 @@ const login = async (req, res) => {
 			//retrieve user with that email
 			const userQuery = await helper.selectRecordsWithCondition(usersCollection, [{ email: email }]);
 			if (userQuery.status === "success") {
-				const userPassowrd = userQuery.message[0].password;
+				const userPassowrd = userQuery.data[0].password;
 
 				//check if the password is correct
 				const result = await bcrypt.compare(password, userPassowrd);
 				if (result) {
 
-					//generate token
-					const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
-					const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "1h" });
+					const query = `SELECT * FROM users u JOIN model_has_roles m ON u.id = m.model_id JOIN roles r ON r.id = m.role_id WHERE u.email = '${email}';`
 
-					//save the token in the database
-					const data = {
-						email: userQuery.message[0].email,
-						token: refreshToken
-					};
+					const userDetails = await helper.selectRecordsWithQuery(query);
 
-					const insertToken = await helper.dynamicInsert(passwordResetTokenCollection, data);
+					if(userDetails.status === "success"){
 
-					if(insertToken.status === "success") {
-						console.log("Token inserted successfully");
-						res.cookie("refreshToken", refreshToken, { httpOnly: true , sameSite:'None',secure:true, maxAge: 24*60*60*1000});
-						res.status(200).json({
-							result: "User authenticated successfully",
-							user: userQuery.message,
-							accessToken: accessToken,
-							code: "200"
-						});
-					}else{
-						console.log("Error inserting token:", insertToken.message);
-						res.status(400).json({
-							result: "An error occurred, see logs for details",
-							code: "400"
-						});
+						//generate token
+						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
+						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "1h" });
+
+						//save the token in the database
+						const data = {
+							email: userQuery.data[0].email,
+							token: refreshToken
+						};
+
+						const insertToken = await helper.dynamicInsert(passwordResetTokenCollection, data);
+
+						if(insertToken.status === "success") {
+							console.log("Token inserted successfully");
+							res.cookie("refreshToken", refreshToken, { httpOnly: true , sameSite:'None',secure:true, maxAge: 24*60*60*1000});
+							res.status(200).json({
+								result: "User authenticated successfully",
+								user: userDetails.data,
+								accessToken: accessToken,
+								code: "200"
+							});
+						}else{
+							console.log("Error inserting token:", insertToken.message);
+							res.status(400).json({
+								result: "An error occurred, see logs for details",
+								code: "400"
+							});
+						}
 					}
 				} else {
 					res.status(401).json({
@@ -228,7 +235,7 @@ const logout = async (req, res) => {
 		}else{
 			console.log(user.message);
 			res.clearCookie("refreshToken",{httpOnly:true,sameSite:'None',secure:true});
-			res.sendStatus(403)
+			// res.sendStatus(403)
 			// .json({ result: user.message, code: "403" });
 		}
 	} catch (error) {

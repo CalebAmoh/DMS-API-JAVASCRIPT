@@ -59,7 +59,6 @@ router.put("/reject-doc", approvalActivityController.rejectDoc);
 //dashboard
 router.get("/get-dashbaord-stats", dashboardController.getDashboardValues);
 
-
 //account routes
 router.get("/get-all-accounts", accountController.getAllAccounts);
 
