@@ -159,8 +159,8 @@ const login = async (req, res) => {
 					if(userDetails.status === "success"){
 
 						//generate token
-						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
-						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "1h" });
+						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15s" });
+						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "30s" });
 
 						//save the token in the database
 						const data = {

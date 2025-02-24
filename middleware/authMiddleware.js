@@ -76,7 +76,7 @@ const handleRefreshToken = async (req, res) => {
 				}
 
 				if(userDetails.status === "success"){
-					accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
+					accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15s" });
 					res.json({ accessToken,user: userDetails.data });
 				}else{
 					return res.status(403).json({ error: "Forbidden" });
