@@ -34,9 +34,7 @@ router.post("/user/register", userController.register);
 router.get("/get-users", userController.getUsers);
 router.get("/get-users-roles", userController.getUserRoles);
 router.post("/delete-user", userController.deleteUser);
-router.post("/user/logout", userController.logoutUser);
-router.post("/update-user", userController.updateUser);
-router.post("/update-password", userController.changeUserPassword);
+router.post("/user/logout", userController.logout);
 router.post("/get-user", userController.getUser);
 
 

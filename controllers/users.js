@@ -160,7 +160,7 @@ const login = async (req, res) => {
 
 						//generate token
 						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15s" });
-						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "30s" });
+						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "15m" });
 
 						//save the token in the database
 						const data = {
@@ -274,268 +274,6 @@ const getUsers = async (req, res) => {
 	}
 };
 
-//delete user
-const deleteUser = async (req, res) => {
-	try {
-		const user = req.body.user_id;
-		const deletedBy = req.body.deleted_by;
-
-		//check if user is already logged in
-		if (!await helper.isAuthUser(deletedBy)) {
-			res.status(400).json({ result: "Unauthenticated User", code: "400" });
-			return;
-		}
-
-		//pass data entry into array
-		const dataEntry = [
-			{ name: "user", value: user },
-			{ name: "deleted by", value: deletedBy }
-		];
-
-		//check for null or empty values from data entry
-		const result = helper.checkForNullOrEmpty(dataEntry);
-
-		//if check is successful delete the user
-		if (result.status === "success") {
-			//check if user to be deleted is actually a registered user
-			if (!await helper.getObjectById(usersCollection, user)) {
-				res.status(200).json({ result: "no user found", code: "200" });
-				return;
-			}
-
-			const deleteUser = await prisma[usersCollection].delete({
-				where: {
-					id: user
-				}
-			});
-
-			console.log(deleteUser);
-
-			if (deleteUser) {
-				//check the loggedInUsers table to see if the user being deleted is logged in and log the user out
-				if (await helper.getObjectById(loggedInUsersCollection, deleteUser.id)) {
-					const deleteAuthUser = await prisma[loggedInUsersCollection].delete({
-						where: {
-							userId: deleteUser.id
-						}
-					});
-				}
-
-				res.status(200).json({ result: "User deleted", code: "200" });
-			}
-		} else {
-			res.status(400).json({ result: result.message, code: "400" });
-		}
-	} catch (error) {
-		console.error("fuck this shit never want to come here", error);
-		res.status(500).json({
-			result: "An error occurred, see logs for details",
-			code: "500"
-		});
-	}
-};
-
-//logout user REMINDER: IF USER IS LOGGING OUT CHECK TO SEE IF HE EVER LOGGED IN1
-const logoutUser = async (req, res) => {
-	const user = req.body.user_id;
-
-	//pass data entry into array
-	const dataEntry = [{ name: "user", value: user }];
-
-	//check for null or empty values from data entry
-	const result = helper.checkForNullOrEmpty(dataEntry);
-
-	//if check is successful logout the user
-	if (result.status === "success") {
-		try {
-			
-
-			// Check if documents exist before attempting to delete
-			if (!await helper.getObjectById(loggedInUsersCollection, user)) {
-				res.status(400).json({ result: "user never logged in", code: "400" });
-				return;
-			}
-
-			//delete logged in user
-			const deleteUser = await prisma[loggedInUsersCollection].delete({
-				where: {
-					userId: user
-				}
-			});
-
-			// Check if the delete operation was successful
-			if (Object.keys(deleteUser).length !== 0) {
-				// The delete operation was successful
-				res.status(200).json({
-					result: "User logged out successfully",
-					code: "200"
-				});
-			} else {
-				// The delete operation failed
-				res.status(400).json({
-					result: "User logged out failed",
-					code: "400"
-				});
-			}
-		} catch (error) {
-			console.error("Error deleting documents:", error);
-			res.status(500).json({
-				result: "An error occurred",
-				code: "500"
-			});
-		}
-	} else {
-		res.status(400).json({ result: result.message, code: "400" });
-	}
-};
-
-//update user
-const updateUser = async (req, res) => {
-	try {
-		const { username, email, phone, userRole, userId, postedBy } = req.body;
-
-		//pass data entry into array
-		const dataEntry = [
-			{ name: "user", value: userId },
-			{ name: "posted by", value: postedBy },
-			{ name: "username", value: username },
-			{ name: "email", value: email },
-			{ name: "user role", value: userRole },
-			{ name: "phone", value: phone }
-		];
-
-		//check for null or empty values from data entry
-		const result = helper.checkForNullOrEmpty(dataEntry);
-
-		//if check is successful update the user
-		if (result.status === "success") {
-			// Check if the user is already logged in
-			if (!await helper.isAuthUser(postedBy)) {
-				res.status(400).json({ result: "Unauthenticated User", code: "400" });
-				return;
-			}
-
-			// Check if documents exist before attempting to update
-			console.log("wait",await helper.getObjectById(usersCollection, userId));
-			if (!await helper.getObjectById(usersCollection, userId)) {
-				res.status(400).json({ result: "user not found", code: "400" });
-				return;
-			}
-
-			// Update user fields in the database
-			const updateUser = await prisma[usersCollection].update({
-				where: {
-					id: userId
-				},
-				data: {
-					username: username,
-					email: email,
-					phone: phone,
-					userRole: userRole
-				}
-			});
-
-			// Check if the update operation was successful
-			if (Object.keys(updateUser).length !== 0) {
-				// The delete operation was successful
-				res.status(200).json({
-					result: "User updated successfully",
-					code: "200"
-				});
-			} else {
-				// The delete operation failed
-				res.status(400).json({
-					result: "User update failed",
-					code: "400"
-				});
-			}
-		} else {
-			res.status(400).json({ result: result.message, code: "400" });
-		}
-	} catch (error) {
-		console.log(error);
-		res
-			.status(500)
-			.json({ result: "An error occurred contact admin", code: "500" });
-	}
-};
-
-//change user password
-const changeUserPassword = async (req, res) => {
-	try {
-		const password = req.body.password;
-		const userId = req.body.user_id;
-		const postedBy = req.body.postedBy;
-
-		// Check if the user is already logged in
-		if (!await helper.isAuthUser(postedBy)) {
-			res.status(400).json({ result: "Unauthenticated User", code: "400" });
-			return;
-		}
-
-		//pass data entry into array
-		const dataEntry = [
-			{ name: "user", value: userId },
-			{ name: "posted by", value: postedBy },
-			{ name: "password", value: password }
-		];
-
-		//check for null or empty values from data entry
-		const result = helper.checkForNullOrEmpty(dataEntry);
-
-		//if check is successful update the user
-		if (result.status === "success") {
-			// Check if documents exist before attempting to update password
-			if (!await helper.getObjectById(usersCollection, userId)) {
-				res.status(400).json({ result: "user not found", code: "400" });
-				return;
-			}
-
-			//encrypt password before you save in the database
-			const hashedPassword = await new Promise((resolve, reject) => {
-				bcrypt.hash(password, saltRounds, (err, hash) => {
-					if (err) {
-						reject(err);
-					} else {
-						resolve(hash);
-					}
-				});
-			});
-
-			// Update user fields in the database
-			const updateUserPassword = await prisma[usersCollection].update({
-				where: {
-					id: userId
-				},
-				data: {
-					password: hashedPassword
-				}
-			});
-
-			// Check if the update operation was successful
-			if (Object.keys(updateUserPassword).length !== 0) {
-				res.status(200).json({
-					result: "User password changed successfully",
-					code: "200"
-				});
-			} else {
-				// The delete operation failed
-				res.status(400).json({
-					result: "User password change failed",
-					code: "400"
-				});
-			}
-		} else {
-			res.status(400).json({ result: result.message, code: "400" });
-		}
-	} catch (error) {
-		console.log(error);
-		res
-			.status(500)
-			.json({ result: "An error occurred contact admin", code: "500" });
-	}
-};
-
 //get a single user
 const getUser = async (req, res) => {
 	try {
@@ -603,6 +341,67 @@ const getUser = async (req, res) => {
 	}
 };
 
+//delete user
+const deleteUser = async (req, res) => {
+	try {
+		const user = req.body.user_id;
+		const deletedBy = req.body.deleted_by;
+
+		//check if user is already logged in
+		if (!await helper.isAuthUser(deletedBy)) {
+			res.status(400).json({ result: "Unauthenticated User", code: "400" });
+			return;
+		}
+
+		//pass data entry into array
+		const dataEntry = [
+			{ name: "user", value: user },
+			{ name: "deleted by", value: deletedBy }
+		];
+
+		//check for null or empty values from data entry
+		const result = helper.checkForNullOrEmpty(dataEntry);
+
+		//if check is successful delete the user
+		if (result.status === "success") {
+			//check if user to be deleted is actually a registered user
+			if (!await helper.getObjectById(usersCollection, user)) {
+				res.status(200).json({ result: "no user found", code: "200" });
+				return;
+			}
+
+			const deleteUser = await prisma[usersCollection].delete({
+				where: {
+					id: user
+				}
+			});
+
+			console.log(deleteUser);
+
+			if (deleteUser) {
+				//check the loggedInUsers table to see if the user being deleted is logged in and log the user out
+				if (await helper.getObjectById(loggedInUsersCollection, deleteUser.id)) {
+					const deleteAuthUser = await prisma[loggedInUsersCollection].delete({
+						where: {
+							userId: deleteUser.id
+						}
+					});
+				}
+
+				res.status(200).json({ result: "User deleted", code: "200" });
+			}
+		} else {
+			res.status(400).json({ result: result.message, code: "400" });
+		}
+	} catch (error) {
+		console.error("fuck this shit never want to come here", error);
+		res.status(500).json({
+			result: "An error occurred, see logs for details",
+			code: "500"
+		});
+	}
+};
+
 //get all user roles
 const getUserRoles = async (req, res) => {
 	try {
@@ -630,9 +429,7 @@ module.exports = {
 	logout,
 	getUsers,
 	deleteUser,
-	logoutUser,
-	updateUser,
-	changeUserPassword,
+	logout,
 	getUser,
 	getUserRoles
 	// other controller functions if any
