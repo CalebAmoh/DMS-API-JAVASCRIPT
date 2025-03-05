@@ -92,10 +92,10 @@ const register = async (req, res) => {
 		if(insertUser.status === "success") {
 			// Insert user role into the database
 			const getUser = await helper.selectRecordsWithCondition(usersCollection, [{ email: email }]);
-			const userId = getUser.message[0].id;
+			const userId = getUser.data[0].id;
 
 			const getRole = await helper.selectRecordsWithCondition(rolesCollection,[{name: role}]);
-			const roleId = getRole.message[0].id;
+			const roleId = getRole.data[0].id;
 
 			//role data
 			const roleData = {
@@ -152,15 +152,15 @@ const login = async (req, res) => {
 				const result = await bcrypt.compare(password, userPassowrd);
 				if (result) {
 
-					const query = `SELECT * FROM users u JOIN model_has_roles m ON u.id = m.model_id JOIN roles r ON r.id = m.role_id WHERE u.email = '${email}';`
+					const query = `SELECT u.id AS user_id,u.first_name,u.last_name,u.employee_id,u.email,r.id AS role_id,r.name AS role_name FROM users u JOIN model_has_roles m ON u.id = m.model_id JOIN roles r ON r.id = m.role_id WHERE u.email = '${email}';`
 
 					const userDetails = await helper.selectRecordsWithQuery(query);
 
 					if(userDetails.status === "success"){
 
 						//generate token
-						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15s" });
-						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "15m" });
+						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "60m" });
+						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "60m" });
 
 						//save the token in the database
 						const data = {
@@ -171,7 +171,7 @@ const login = async (req, res) => {
 						const insertToken = await helper.dynamicInsert(passwordResetTokenCollection, data);
 
 						if(insertToken.status === "success") {
-							console.log("Token inserted successfully");
+							console.log("Token inserted successfully",userDetails);
 							res.cookie("refreshToken", refreshToken, { httpOnly: true , sameSite:'None',secure:true, maxAge: 24*60*60*1000});
 							res.status(200).json({
 								result: "User authenticated successfully",

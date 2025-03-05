@@ -90,7 +90,7 @@ const getPendingDocs = async (req, res) => {
 		const status_approved = STATUS.APPROVED;
 		const status_draft = STATUS.DRAFT;
 
-    
+    console.log("checking user id", userId);
 		
     // const query = `
     //   SELECT DISTINCT rd.*, doctype_details.description AS doctype_name
@@ -292,13 +292,13 @@ const approveDoc = async (req, res) => {
             });
           }
 
-          const doc = docResults[0];
-          let countAllApprovers = parseInt(doc.all_approvers);
+          const all_approvers = docResults[0];
+          let countAllApprovers = parseInt(all_approvers.all_approvers);
 
           //get the number of people who are required to approve the document
-          const getCurrentLevelNonRequiredApproversCount = `SELECT (SELECT COUNT(*) FROM doc_approvers WHERE doctype_id = ? AND approval_stage = ? AND is_mandatory = ?) as non_required_approvers`;
+          const getCurrentLevelRequiredApproversCount = `SELECT (SELECT COUNT(*) FROM doc_approvers WHERE doctype_id = ? AND approval_stage = ? AND is_mandatory = ?) as required_approvers`;
 
-          connection.query(getCurrentLevelNonRequiredApproversCount, [doc.doctype_id, approvalStage, 0], (err, docResults) => {
+          connection.query(getCurrentLevelRequiredApproversCount, [document.doctype_id, approvalStage, 1], (err, docResults) => {
             if (err) {
               connection.release();
               console.error("Error fetching document:", err);
@@ -316,8 +316,8 @@ const approveDoc = async (req, res) => {
               });
             }
 
-            const doc = docResults[0];
-            let countNonRequiredApprovers = parseInt(doc.non_required_approvers);
+            const required_approvers_results = docResults[0];
+            let countRequiredApprovers = parseInt(required_approvers_results.required_approvers);
 
             //get the number of people who have approved the document on the current level
             const getCurrentLevelApprovedApproversCount = `SELECT (SELECT current_approvers from request_documents where id = ?) as approved_approvers`;
@@ -340,15 +340,14 @@ const approveDoc = async (req, res) => {
                 });
               }
 
-              const doc = docResults[0];
+              const approved_approvers = docResults[0];
 
-              let countApprovedApprovers = parseInt(doc.approved_approvers);
-              console.log("total approved approvers",countApprovedApprovers);
+              let countApprovedApprovers = parseInt(approved_approvers.approved_approvers);
 
               //get quorum for the document approval level
               const getQuorum = `SELECT (SELECT quorum FROM doc_approval_setups WHERE doctype_id = ? AND approval_stage = ?) as quorum`;
 
-              console.log("approvalStage",doc.doctype_id);
+              console.log("approvalStage",document.doctype_id);
               console.log("approvalStage",approvalStage);
               connection.query(getQuorum, [document.doctype_id, approvalStage], (err, docResults) => {
                 if (err) {
@@ -368,15 +367,15 @@ const approveDoc = async (req, res) => {
                   });
                 }
 
-                const doc = docResults[0];
-
-                let quorum = parseInt(doc.quorum);
-                console.log("quorum",quorum);
+                const quorum_results = docResults[0];
+                console.log("actual quorum results",quorum_results);
+                let quorum = parseInt(quorum_results.quorum);
+                console.log("quorum results",quorum);
 
                 //get the approver's who are required to approve that have approved the document
                 const getApproversWhoHaveApproved = `SELECT (SELECT COUNT(*) FROM approval_activities WHERE doc_id = ?  AND approved_by IN (SELECT approver_id FROM doc_approvers WHERE doctype_id = ? AND approval_stage = ? AND is_mandatory = ?)) as non_required_approvers_approved`;
 
-                connection.query(getApproversWhoHaveApproved, [docId, doc.doctype_id, approvalStage, 0], (err, docResults) => {
+                connection.query(getApproversWhoHaveApproved, [docId, document.doctype_id, approvalStage, 0], (err, docResults) => {
                   if (err) {
                     connection.release();
                     console.error("Error fetching document:", err);
@@ -396,14 +395,14 @@ const approveDoc = async (req, res) => {
 
                   }
 
-                  const doc = docResults[0];
+                  const non_required_approvers_approved_results = docResults[0];
 
-                  let countNonRequiredApproversApproved = parseInt(doc.non_required_approvers_approved);
+                  let countNonRequiredApproversApproved = parseInt(non_required_approvers_approved_results.non_required_approvers_approved);
 
                   //check if the imcoming user is required to approve the document
                   const isApproverRequired = `select count(*) as is_approver_required from doc_approvers where doctype_id = ? and approval_stage = ? and approver_id = ? and is_mandatory = ?`;
 
-                  connection.query(isApproverRequired, [doc.doctype_id, approvalStage, userId, 1], (err, docResults) => {
+                  connection.query(isApproverRequired, [document.doctype_id, approvalStage, userId, 1], (err, docResults) => {
                     if (err) {
                       connection.release();
                       console.error("Error fetching document:", err);
@@ -423,17 +422,31 @@ const approveDoc = async (req, res) => {
 
                     }
 
-                    const doc = docResults[0];
+                    const isApproverRequired_results = docResults[0];
 
-                    let isApproverRequired = parseInt(doc.is_approver_required);
+                    let isApproverRequired = parseInt(isApproverRequired_results.is_approver_required);
 
 
                     
                     //if user is required to approve the document check if the user will complete the required approvers
-                    let isRequiredApproversLeft = 1;
+                    let isRequiredApproversLeft = 0;
+                    console.log("checking if user is required to approve11",isApproverRequired);
+                    let countNonRequiredApprovers = quorum - countRequiredApprovers; // the number of approvers who are required to approve
                     if(isApproverRequired !== 1){
-                      const willCompleteRequiredApprovers = (countNonRequiredApproversApproved + 1) >= countNonRequiredApprovers;
-                      isRequiredApproversLeft = willCompleteRequiredApprovers ? 1 : 0;
+                      const willCompleteNonRequiredApprovers = (countNonRequiredApproversApproved + 1) >= countNonRequiredApprovers;
+                      console.log("checking if user is required to approve willCompleteRequiredApprovers",willCompleteNonRequiredApprovers);
+                      console.log("checking if user is required to approve countNonRequiredApproversApproved",countNonRequiredApproversApproved);
+                      console.log("checking if user is required to approve countNonRequiredApprovers",countNonRequiredApprovers);
+                      isRequiredApproversLeft = willCompleteNonRequiredApprovers ? 1 : 0;
+                    }else{
+                      console.log("entered required approvers room")
+                      const willCompleteRequiredApprovers = (countApprovedApprovers + 1) >= countRequiredApprovers;
+                      console.log("checking if user is required to approve willCompleteRequiredApprovers",willCompleteRequiredApprovers);
+                      console.log("checking if user is required to approve countApprovedApprovers",countApprovedApprovers);
+                      console.log("checking if user is required to approve countRequiredApprovers",countRequiredApprovers);
+                      if(willCompleteRequiredApprovers){
+                        isRequiredApproversLeft = 0;
+                      }
                     }
 
                     //increment the approval stage if the required number of approvers have approved the document

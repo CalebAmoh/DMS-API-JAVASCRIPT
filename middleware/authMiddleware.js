@@ -31,10 +31,10 @@ const checkToken = (req, res, next) => {
 		// console.log(access_token)
 		jwt.verify(access_token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
 			if (err) {
-				return res.status(403).json({ error: "Forbidden" });
+				return res.status(403).json({ error: "Forbidden check" });
 			}
 
-			// console.log(user);
+			console.log(user);
 			req.email = user.email;
 			next();
 		});
@@ -49,7 +49,6 @@ const handleRefreshToken = async (req, res) => {
 
 	try {
 		const cookies = req.cookies;
-		console.log("refresh token", cookies);
 		!cookies?.refreshToken && res.status(401).json({ error: "Unauthorized" });
 
 
@@ -64,26 +63,30 @@ const handleRefreshToken = async (req, res) => {
 			//compare the token from the db with the token in the cookie to ensure they are the same token 
 			userToken !== refreshToken && res.status(401).json({ error: "Unauthorized" });
 
-			const query = `SELECT * FROM users u JOIN model_has_roles m ON u.id = m.model_id JOIN roles r ON r.id = m.role_id WHERE u.email = '${email}';`
+			const query = `SELECT u.id AS user_id,u.first_name,u.last_name,u.employee_id,u.email,r.id AS role_id,r.name AS role_name FROM users u JOIN model_has_roles m ON u.id = m.model_id JOIN roles r ON r.id = m.role_id WHERE u.email = '${email}';`
 				
 			const userDetails = await helper.selectRecordsWithQuery(query);
 
-			//verify the token
-			jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+			//verify the token here
+			jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, async (err, user) => {
 				if (err || user.email !== email) {
-					console.log(err);
-					return res.status(403).json({ error: "Forbidden" });
+					console.log("checking refresh token expired",email);
+					data = {email: email}
+					const deleted = await helper.deleteRecordsWithCondition(passwordResetTokenCollection, [data]);
+					if (deleted.status === "success") {
+						return res.status(403).json({ error: "Forbidden" });
+					}
 				}
 
+				//if user
 				if(userDetails.status === "success"){
-					accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15s" });
+					accessToken = jwt.sign({ email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "60m" });
 					res.json({ accessToken,user: userDetails.data });
 				}else{
-					return res.status(403).json({ error: "Forbidden" });
+					return res.status(403).json({ error: "Forbidden refresh" });
 				}
 			});
 		}else{
-			console.log("user in refresh",user);
 			res.status(403).json({ result: user.message, code: "403" });
 		}
 	} catch (error) {
