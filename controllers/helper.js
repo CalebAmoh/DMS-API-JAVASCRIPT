@@ -320,6 +320,82 @@ async function dynamicInsert(tableName, data) {
 }
 
 /**
+ * Dynamically updates data in any specified MySQL table by ID
+ * @param {string} tableName - Name of the table to update
+ * @param {Object} data - Data object containing fields to be updated
+ * @param {number|string} id - ID of the record to update
+ * @param {string} idColumn - Name of the ID column (defaults to 'id')
+ * @returns {Promise<Object>} Result of the update operation
+ */
+async function dynamicUpdateWithId(tableName, data, id, idColumn = 'id') {
+	try {
+		// Create SET clause for the update query
+		const setClause = Object.keys(data)
+			.map(key => `${key} = ?`)
+			.join(', ');
+		
+		// Values for the prepared statement (all data values followed by the ID)
+		const values = [...Object.values(data), id];
+		
+		// Construct the UPDATE query
+		const query = `UPDATE ${tableName} SET ${setClause} WHERE ${idColumn} = ?`;
+
+		return new Promise((resolve, reject) => {
+			pool.getConnection((err, connection) => {
+				if (err) {
+					console.error("Error getting connection from pool:", err);
+					reject({
+						status: "error",
+						message: "Database connection failed",
+						error: err
+					});
+					return;
+				}
+
+				connection.query(query, values, (err, result) => {
+					connection.release(); // Always release the connection
+
+					if (err) {
+						console.error(`Error updating ${tableName}:`, err);
+						reject({
+							status: "error",
+							message: `Failed to update data: ${err.message}`,
+							error: err
+						});
+						return;
+					}
+
+					if (result.affectedRows === 0) {
+						resolve({
+							status: "error",
+							message: `No record found with ${idColumn} = ${id}`,
+							affectedRows: 0
+						});
+					} else {
+						resolve({
+							status: "success",
+							message: "Data updated successfully",
+							affectedRows: result.affectedRows,
+							data: {
+								[idColumn]: id,
+								...data
+							}
+						});
+					}
+				});
+			});
+		});
+	} catch (error) {
+		console.error(`Error in dynamicUpdateWithId for ${tableName}:`, error);
+		throw {
+			status: "error",
+			message: `Failed to update data: ${error.message}`,
+			error: error
+		};
+	}
+}
+
+/**
  * Delete records from MySQL table based on conditions
  * @param {string} tableName - Name of the table to delete from
  * @param {Object|Array} conditions - Either an object with column-value pairs or array of {column, value} objects
@@ -450,6 +526,7 @@ module.exports = {
 	selectRecordsWithCondition,
 	deleteRecordsWithCondition,
 	dynamicInsert,
-	selectRecordsWithQuery
+	selectRecordsWithQuery,
+	dynamicUpdateWithId
 	// other controller functions if any
 };

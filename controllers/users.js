@@ -17,12 +17,12 @@ require("dotenv").config();
  * Activities include {
 	* register() - to add new users,
 	* login() - to authenticate user,
+	* logout() - to unauthenticate a user,
 	* getUsers() - to get all users in the app,
+	* getUser() - get a single user
 	* deleteUser() - to delete a user,
-	* logoutUser() - to unauthenticate a user,
 	* updateUser() - to change the details of a user,
 	* changeUserPassword() -  to reset user password
-	* getUser() - get a single user
 	* checkForUniqueEmail() - handles the checking of unique passwords
 	* checkForUniquePhone() -  handles the checking of unique phone numbers
  * }
@@ -34,8 +34,6 @@ const register = async (req, res) => {
 	try {
 		// Access and validate data from the request body
 		const { employee_id, first_name, last_name, email, rank, phone, status, role, posted_by } = req.body;
-
-		console.log(req.body);
 
 		// Pass data entry into array
 		const dataEntry = [
@@ -159,7 +157,7 @@ const login = async (req, res) => {
 					if(userDetails.status === "success"){
 
 						//generate token
-						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "60m" });
+						const accessToken = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "10s" });
 						const refreshToken = jwt.sign({ email: email }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "60m" });
 
 						//save the token in the database
@@ -277,63 +275,20 @@ const getUsers = async (req, res) => {
 //get a single user
 const getUser = async (req, res) => {
 	try {
-		//get data from request
-		const { userId, requestedBy } = req.body;
+		
+			query = `SELECT CONCAT(users.first_name, ' ', users.last_name) AS employee, users.*, model_has_roles.role_id AS role,roles.name AS role_name FROM users JOIN model_has_roles ON users.id = model_has_roles.model_id JOIN roles ON model_has_roles.role_id = roles.id WHERE users.id = ? LIMIT 1`;
+			
+			//check for null or empty values from data entry
+			const result = await helper.selectRecordsWithQuery(query, [req.params.userId]);
 
-		//structure the data for validation
-		dataEntry = [
-			{ name: "user id", value: userId },
-			{ name: "requested by", value: requestedBy }
-		];
-
-		//check for null or empty values from data entry
-		const result = helper.checkForNullOrEmpty(dataEntry);
-
-		if (result.status !== "success") {
-			res.status(400).json({ result: result.message, code: "400" });
-			return;
-		}
-
-		// Check if the user is already logged in
-		if (!await helper.isAuthUser(requestedBy)) {
-			res.status(400).json({ result: "Unauthenticated User", code: "400" });
-			return;
-		}
-
-		// Check if documents exist before attempting to delete
-		if (!await helper.getObjectById(usersCollection, userId)) {
-			res.status(400).json({ result: "user not found", code: "400" });
-			return;
-		}
-
-		const user = await prisma[usersCollection].findUnique({
-			where: {
-				id: userId
+			if (result.status === "success") {
+				res.status(200).json({ result: result.data, code: "200" });
+			}else{
+				res.status(404).json({ result: result.message, code: "404" });	
 			}
-		});
 
-		// Check if the update operation was successful
-		if (Object.keys(user).length !== 0) {
-			res.status(200).json({
-				result: {
-					user: {
-						username: user.username,
-						userRole: user.userRole,
-						phone: user.phone,
-						email: user.email
-					}
-				},
-				code: "200"
-			});
-		} else {
-			// The delete operation failed
-			res.status(400).json({
-				result: "User not found",
-				code: "400"
-			});
-		}
 	} catch (error) {
-		console.error("fuck this shit never want to come here", error);
+		console.error("Unexpected Error", error);
 		res.status(500).json({
 			result: "An error occurred, see logs for details",
 			code: "500"
@@ -402,6 +357,71 @@ const deleteUser = async (req, res) => {
 	}
 };
 
+//update user
+const updateUser = async(req,res) =>{
+	try{
+		// Access and validate data from the request body
+		const { employee_id, first_name, last_name, email, rank, phone, status, role, posted_by } = req.body;
+
+		// Pass data entry into array
+		const dataEntry = [
+			// { name: "employee id", value: employee_id },
+			// { name: "firstname", value: first_name },
+			// { name: "last name", value: last_name },
+			// { name: "email", value: email },
+			// { name: "phone", value: phone },
+			{ name: "user role", value: role },
+			{ name: "status", value: status },
+			{ name: "posted by", value: posted_by },
+		];
+
+		// Check for null or empty values from data entry
+		const result = helper.checkForNullOrEmpty(dataEntry);
+
+		if(result.status === "success"){
+			const data = {
+				employee_id,
+				first_name,
+				last_name,
+				posted_by,
+				status
+			};
+
+			const updateUser = await helper.dynamicUpdateWithId(usersCollection,data,req.params.userId);
+
+			if(updateUser.status === "success"){
+				// update user role
+				const getRole = await helper.selectRecordsWithCondition(rolesCollection,[{name: role}]);
+				const roleId = getRole.data[0].id;
+
+				//role data
+				const roleData = {
+					role_id: roleId,
+					model_id: req.params.userId,
+					"model_type":"App\Models\User"
+				};
+
+				const roleUpdate = await helper.dynamicUpdateWithId("model_has_roles", roleData,req.params.userId,"model_id");
+
+				if(roleUpdate.status === "success"){
+					res.status(200).json({ result: "User updated successfully", code: "200" });
+				}else{
+					res.status(203).json({result:roleUpdate.message, code:"203"});
+				}
+			}else{
+				console.log("Error updating user:", updateUser.message);
+				return res.status(400).json({ result: "An error occurred, see logs for details", code: "400" });
+			}
+		}else{
+			res.status(400).json({ result: result.message, code: "400" });
+		}
+
+	}catch(error){
+		console.error("Error updating user", error);
+		res.status(500).json({ result: "An error occurred, see logs for details", code: "500" });
+	}
+}
+
 //get all user roles
 const getUserRoles = async (req, res) => {
 	try {
@@ -428,6 +448,7 @@ module.exports = {
 	login,
 	logout,
 	getUsers,
+	updateUser,
 	deleteUser,
 	logout,
 	getUser,

@@ -8,6 +8,7 @@ const approverSetupController = require("../controllers/approverSetups.js"); //a
 const approvalActivityController = require("../controllers/approvalActivity.js"); //approver setup controller
 const dashboardController = require("../controllers/dashboard.js");
 const accountController = require("../controllers/accountSetup.js");
+const documentController = require("../controllers/document.js");
 
 const multer = require("multer");
 const upload = multer({ storage: multer.memoryStorage() }); // Set the destination folder for uploaded files
@@ -35,14 +36,15 @@ router.get("/get-users", userController.getUsers);
 router.get("/get-users-roles", userController.getUserRoles);
 router.post("/delete-user", userController.deleteUser);
 router.post("/user/logout", userController.logout);
-router.post("/get-user", userController.getUser);
+router.get("/get-user:userId", userController.getUser);
+router.put("/update-user:userId", userController.updateUser);
 
 
-router.get("/get-generated-docs", newsController.getGeneratedDocs);
+
 
 //parameter routes
-router.get("/get-doc-types", parameterController.getDoctypes);
-router.get("/get-available-doc-types", parameterController.getAvailableDoctypes);
+router.get("/get-parameters", parameterController.getParameters);
+router.get("/get-code-creation-details:codeId", parameterController.getCodeDetails);
 
 //approver setups
 router.get("/get-approver-setups", approverSetupController.getApproverSetups);
@@ -53,6 +55,13 @@ router.get("/get-submitted-docs", approvalActivityController.getSubmittedDocs);
 router.post("/get-pending-docs", approvalActivityController.getPendingDocs);
 router.put("/approve-doc", approvalActivityController.approveDoc);
 router.put("/reject-doc", approvalActivityController.rejectDoc);
+
+//document routes
+router.post("/generate-doc", documentController.generateDoc)
+router.put("/update-doc:docId", documentController.updateDoc)
+router.get("/get-doc:docId", documentController.getDocById)
+router.get("/get-generated-docs", documentController.getGeneratedDocs);
+router.put("/submit-doc:docId", documentController.submitDoc);
 
 //dashboard
 router.get("/get-dashbaord-stats", dashboardController.getDashboardValues);

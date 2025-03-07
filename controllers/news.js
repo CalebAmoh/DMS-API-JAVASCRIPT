@@ -590,47 +590,7 @@ const deleteNews = async (req, res) => {
 };
 
 
-const getGeneratedDocs = async (req, res) => {
-	try {
-	  const query = `SELECT  request_documents.*, doctype_details.description AS doctype_name
-						FROM request_documents
-	JOIN code_creation_details AS doctype_details
-		ON request_documents.doctype_id = doctype_details.id
-		AND doctype_details.code_id = 2
-	WHERE 
-		request_documents.posted_by = 1;`;
-  
-	  // Get a connection from the pool
-	  pool.getConnection((err, connection) => {
-		if (err) {
-		  console.error("Error getting connection from pool: ", err);
-		  res.status(500).json({ error: "Database connection failed." });
-		  return;
-		}
-  
-  
-		// Execute the query
-		connection.query(query, (err, results) => {
-		  if (err) {
-			console.error("Error executing query: ", err);
-			res.status(500).json({ error: "Query execution failed." });
-		  } else {
-			// console.log("Query successful: ", results);
-			res.status(200).json({
-			  documents: results,
-			  code: "200",
-			});
-		  }
-  
-		  // Release the connection back to the pool
-		  connection.release();
-		});
-	  });
-	} catch (error) {
-	  console.error("Unexpected error: ", error);
-	  res.status(500).json({ error: "An unexpected error occurred." });
-	}
-};
+
 
 module.exports = {
 	addNews,
@@ -640,6 +600,5 @@ module.exports = {
 	getNews,
 	testSpeed,
 	deleteNews,
-	getGeneratedDocs
 	// other controller functions if any
 };

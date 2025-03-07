@@ -29,13 +29,19 @@ const checkToken = (req, res, next) => {
 		
 		access_token = token.split(" ")[1];
 		// console.log(access_token)
-		jwt.verify(access_token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+		jwt.verify(access_token, process.env.ACCESS_TOKEN_SECRET, async(err, user) => {
 			if (err) {
-				return res.status(403).json({ error: "Forbidden check" });
+				console.log("checking token expired",user);
+				// data = {email: user.email}
+				// const deleted = await helper.deleteRecordsWithCondition(passwordResetTokenCollection, [data]);
+				// if (deleted.status === "success") {
+				// 	return res.status(403).json({ error: "Forbidden" });
+				// }
+				// return res.status(403).json({ error: "Forbidden check" });
 			}
 
-			console.log(user);
-			req.email = user.email;
+			// console.log(user);
+			// req.email = user.email;
 			next();
 		});
 	} catch (error) {
