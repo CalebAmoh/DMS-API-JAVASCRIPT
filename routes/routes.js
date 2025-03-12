@@ -45,6 +45,8 @@ router.put("/update-user:userId", userController.updateUser);
 //parameter routes
 router.get("/get-parameters", parameterController.getParameters);
 router.get("/get-code-creation-details:codeId", parameterController.getCodeDetails);
+router.get("/get-doc-types", parameterController.getDoctypes);
+router.get("/get-available-doc-types", parameterController.getAvailableDoctypes);
 
 //approver setups
 router.get("/get-approver-setups", approverSetupController.getApproverSetups);

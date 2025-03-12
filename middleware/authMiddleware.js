@@ -93,6 +93,7 @@ const handleRefreshToken = async (req, res) => {
 				}
 			});
 		}else{
+			console.log("checking refresh token expired",user);
 			res.status(403).json({ result: user.message, code: "403" });
 		}
 	} catch (error) {

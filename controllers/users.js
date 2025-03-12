@@ -141,6 +141,17 @@ const login = async (req, res) => {
 
 		//if check is successful get the user's encrypted password and compare with the incoming password
 		if (result.status === "success") {
+			data = {email: email}
+			console.log("im now entering")
+			const deleted = await helper.deleteRecordsWithCondition(passwordResetTokenCollection, [data]);
+			if (deleted.status === "success") {
+				console.log("Token deleted successfully");
+			}else{
+				//delete failed
+				console.log("watsup",deleted.message);
+				// res.status(500).json({ error: "Internal Server Error" });
+			}
+
 			//retrieve user with that email
 			const userQuery = await helper.selectRecordsWithCondition(usersCollection, [{ email: email }]);
 			if (userQuery.status === "success") {

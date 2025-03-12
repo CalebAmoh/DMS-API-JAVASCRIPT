@@ -75,9 +75,14 @@ const getGeneratedDocs = async (req, res) => {
 						FROM request_documents
 	JOIN code_creation_details AS doctype_details
 		ON request_documents.doctype_id = doctype_details.id
-		AND doctype_details.code_id = 2
-	WHERE 
-		request_documents.posted_by = 1;`;
+		AND doctype_details.code_id = 2;`;
+	//   const query = `SELECT  request_documents.*, doctype_details.description AS doctype_name
+	// 					FROM request_documents
+	// JOIN code_creation_details AS doctype_details
+	// 	ON request_documents.doctype_id = doctype_details.id
+	// 	AND doctype_details.code_id = 2
+	// WHERE 
+	// 	request_documents.posted_by = 1;`;
         
     const docs = await helper.selectRecordsWithQuery(query);
     if(docs.status === "success"){
@@ -102,7 +107,10 @@ const getDocById = async (req,res) => {
         const docDetails = await helper.selectRecordsWithQuery(query,[req.params.docId]);
 
         if(docDetails.status === "success"){
-            res.status(200).json({result:docDetails.data, code:"200"})
+            expense_details_query = `SELECT * FROM account_setups where id = ?;`
+            const expenseDetails = await helper.selectRecordsWithQuery(expense_details_query,[docDetails.data[0].doctype_id]);
+
+            res.status(200).json({result:docDetails.data,expense_details:expenseDetails.data[0], code:"200"})
         }else{
             res.status(404).json({result:docDetails.message, code:"404"})
         }

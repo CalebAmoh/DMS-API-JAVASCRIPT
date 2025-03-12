@@ -1,5 +1,6 @@
 const helper = require("./helper"); //access helper functions
 require("dotenv").config();
+const axios = require('axios');
 const pool = require("../mysqlconfig");
 
 /***********************************************************************************************************
@@ -223,8 +224,8 @@ const getPendingDocs = async (req, res) => {
  */
 const approveDoc = async (req, res) => {
   try {
-    const { docId, userId, remarks } = req.body;
-
+    const { docId, userId, recommended_amount, remarks,db_account,cr_account,trans_type } = req.body.data;
+    // console.log("this is crazzyyy",req.body.data);return
     // Validate required parameters
     if (!docId || !userId) {
       return res.status(400).json({
@@ -341,8 +342,8 @@ const approveDoc = async (req, res) => {
               }
 
               const approved_approvers = docResults[0];
-
-              let countApprovedApprovers = parseInt(approved_approvers.approved_approvers);
+              console.log("approved_approvers",approved_approvers);
+              let countApprovedApprovers = parseInt(approved_approvers.approved_approvers===null ? 0 : approved_approvers.approved_approvers);
 
               //get quorum for the document approval level
               const getQuorum = `SELECT (SELECT quorum FROM doc_approval_setups WHERE doctype_id = ? AND approval_stage = ?) as quorum`;
@@ -430,27 +431,21 @@ const approveDoc = async (req, res) => {
                     
                     //if user is required to approve the document check if the user will complete the required approvers
                     let isRequiredApproversLeft = 0;
-                    console.log("checking if user is required to approve11",isApproverRequired);
                     let countNonRequiredApprovers = quorum - countRequiredApprovers; // the number of approvers who are required to approve
                     if(isApproverRequired !== 1){
                       const willCompleteNonRequiredApprovers = (countNonRequiredApproversApproved + 1) >= countNonRequiredApprovers;
-                      console.log("checking if user is required to approve willCompleteRequiredApprovers",willCompleteNonRequiredApprovers);
-                      console.log("checking if user is required to approve countNonRequiredApproversApproved",countNonRequiredApproversApproved);
-                      console.log("checking if user is required to approve countNonRequiredApprovers",countNonRequiredApprovers);
                       isRequiredApproversLeft = willCompleteNonRequiredApprovers ? 1 : 0;
                     }else{
-                      console.log("entered required approvers room")
                       const willCompleteRequiredApprovers = (countApprovedApprovers + 1) >= countRequiredApprovers;
-                      console.log("checking if user is required to approve willCompleteRequiredApprovers",willCompleteRequiredApprovers);
-                      console.log("checking if user is required to approve countApprovedApprovers",countApprovedApprovers);
-                      console.log("checking if user is required to approve countRequiredApprovers",countRequiredApprovers);
                       if(willCompleteRequiredApprovers){
                         isRequiredApproversLeft = 0;
                       }
                     }
 
                     //increment the approval stage if the required number of approvers have approved the document
+                    console.log("countApprovedApprovers",countApprovedApprovers+1);
                     const willCompleteStage = (countApprovedApprovers + 1) >= quorum;
+                    console.log("willCompleteStage",willCompleteStage);
                     const newApprovalStage = willCompleteStage ? approvalStage + 1 : approvalStage; //if the stage is complete, increment the stage
                     const current_approvers = willCompleteStage ? 0 : current_approvals+1; //if the stage is complete, reset the current approvers to 0
                     isRequiredApproversLeft = willCompleteStage ? 0 : isRequiredApproversLeft; //if the stage is complete, reset the isRequiredApproversLeft to 0
@@ -529,7 +524,79 @@ const approveDoc = async (req, res) => {
                             }
 
                             //if document is fully approved, return message
-                            if(isFullyApproved === "APPROVED"){
+                            if(isFullyApproved){
+                              
+                              //for generating document reference
+                              const generateDocRef = () => {
+                                const randomStr = Math.random().toString(36).substring(2, 15);
+                                const timestamp = Date.now();
+                                return randomStr.substr(0, 2) + timestamp;
+                              };
+
+                              const generateTransRef = () => {
+
+                                // Similar to PHP's rand(), generates random integer between min and max
+                                const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+                                const randomStr = Math.random().toString(36).substring(2, 15);
+                                const timestamp = Date.now();
+                                const randomNum = rand(1000, 9999); // Add random 4-digit number
+                                return randomStr.substr(0, 2) + timestamp + randomNum;
+
+                              };
+
+                              const trans_ref = generateTransRef(); //reference for debit and credit product 
+                              const currency = "SLE" //currency for transaction
+
+                              let data = JSON.stringify({
+                                "approvedBy": userId,
+                                "channelCode": "HRP",
+                                "transType": "SAL",
+                                "debitAccounts": [
+                                  {
+                                    "debitAmount": recommended_amount,
+                                    "debitAccount": db_account,
+                                    "debitCurrency": currency,
+                                    "debitNarration": "Debit for "+trans_type,
+                                    "debitProdRef": "NS_"+trans_ref,
+                                    "debitBranch": "000"
+                                  }
+                                ],
+                                "creditAccounts": [
+                                  {
+                                    "creditAmount": recommended_amount,
+                                    "creditAccount": cr_account,
+                                    "creditCurrency": currency,
+                                    "creditNarration": "Credit for "+trans_type,
+                                    "creditProdRef": "BS_"+trans_ref,
+                                    "creditBranch": "000"
+                                  }
+                                  
+                                ],
+                                "referenceNo": generateDocRef(),
+                                "postedBy": userId
+                              });
+
+                              let config = {
+                                method: 'put',
+                                maxBodyLength: Infinity,
+                                url: 'http://10.203.14.16:8384/core/api/v1.0/account/performBulkPayment',
+                                headers: { 
+                                  'x-api-key': '20171411891', 
+                                  'x-api-secret': '141116517P', 
+                                  'Content-Type': 'application/json', 
+                                  'X-FORWARDED-FOR': '172.16.10.1', 
+                                  'Authorization': 'rererer'
+                                },
+                                data : data
+                              };
+
+                              axios.request(config)
+                              .then((response) => {
+                                console.log(JSON.stringify(response.data));
+                              })
+                              .catch((error) => {
+                                console.log(error);
+                              });
 
                             }
 
