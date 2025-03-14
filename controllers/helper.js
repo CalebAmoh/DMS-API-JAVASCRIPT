@@ -396,7 +396,7 @@ async function dynamicUpdateWithId(tableName, data, id, idColumn = 'id') {
 }
 
 /**
- * Delete records from MySQL table based on conditions
+ * Delete records from MySQL table based on conditions.
  * @param {string} tableName - Name of the table to delete from
  * @param {Object|Array} conditions - Either an object with column-value pairs or array of {column, value} objects
  * @returns {Promise<Object>} Object containing status, message and count of deleted records

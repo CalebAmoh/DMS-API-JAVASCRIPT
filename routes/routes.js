@@ -34,7 +34,7 @@ router.use(checkToken);
 router.post("/user/register", userController.register);
 router.get("/get-users", userController.getUsers);
 router.get("/get-users-roles", userController.getUserRoles);
-router.post("/delete-user", userController.deleteUser);
+// router.post("/delete-user", userController.deleteUser);
 router.post("/user/logout", userController.logout);
 router.get("/get-user:userId", userController.getUser);
 router.put("/update-user:userId", userController.updateUser);

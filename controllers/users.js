@@ -20,7 +20,7 @@ require("dotenv").config();
 	* logout() - to unauthenticate a user,
 	* getUsers() - to get all users in the app,
 	* getUser() - get a single user
-	* deleteUser() - to delete a user,
+	* deactivateUser() - to deactivate a user,
 	* updateUser() - to change the details of a user,
 	* changeUserPassword() -  to reset user password
 	* checkForUniqueEmail() - handles the checking of unique passwords
@@ -308,7 +308,7 @@ const getUser = async (req, res) => {
 };
 
 //delete user
-const deleteUser = async (req, res) => {
+const deactivateUser = async (req, res) => {
 	try {
 		const user = req.body.user_id;
 		const deletedBy = req.body.deleted_by;
@@ -460,7 +460,7 @@ module.exports = {
 	logout,
 	getUsers,
 	updateUser,
-	deleteUser,
+	// deleteUser,
 	logout,
 	getUser,
 	getUserRoles
