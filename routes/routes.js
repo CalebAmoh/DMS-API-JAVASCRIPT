@@ -76,7 +76,9 @@ router.get("/get-dashbaord-stats", dashboardController.getDashboardValues);
 
 //account routes
 router.get("/get-all-accounts", accountController.getAllAccounts);
+router.get("/get-all-active-accounts", accountController.getAllActiveAccounts);
 router.post("/add-account", accountController.createAccount);
+router.put("/update-account:accountId", accountController.updateAccount);
 
 router.all("*", (req, res) => {
 	res.status(403).json({ code: "404", message: "route not found" });

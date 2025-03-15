@@ -8,6 +8,7 @@ const pool = require("../mysqlconfig");
  * Activities in {
 	* getAllAccounts() - get all accounts,
   * createAccount() - create accounts
+  * updateAccount() - updates account details
  * }
  ***************************************************************************************************************/
 
@@ -116,9 +117,121 @@ const getAllAccounts = async (req, res) => {
     }
 };
 
+//returns all accounts
+const getAllActiveAccounts = async (req, res) => {
+	try {
+        const query = `SELECT * from account_setups where status =1;`;
+    
+        // Get a connection from the pool
+        pool.getConnection((err, connection) => {
+          if (err) {
+            console.error("Error getting connection from pool: ", err);
+            res.status(500).json({ error: "Database connection failed." });
+            return;
+          }
+    
+    
+          // Execute the query
+          connection.query(query, (err, results) => {
+            if (err) {
+              console.error("Error executing query: ", err);
+              res.status(500).json({ error: "Query execution failed." });
+            } else {
+              // console.log("Query successful: ", results);
+              res.status(200).json({
+                accounts: results,
+                code: "200",
+              });
+            }
+    
+            // Release the connection back to the pool
+            connection.release();
+          });
+        });
+      } catch (error) {
+        console.error("Unexpected error: ", error);
+        res.status(500).json({ error: "An unexpected error occurred." });
+    }
+};
+
+/**
+ * Updates an existing account setup
+ * @param {Object} req - Request object containing account details
+ * @param {Object} res - Response object
+ * @returns {Object} JSON response with update status
+ */
+const updateAccount = async (req, res) => {
+    try {
+        const { accountId } = req.params;
+        const { account_name, account_number, account_type, status, posted_by } = req.body;
+
+        // Check if account exists
+        const accountQuery = `SELECT * FROM account_setups WHERE id = ?`;
+        const accountResult = await helper.selectRecordsWithQuery(accountQuery, [accountId]);
+        console.log(accountResult);
+        if (accountResult.status !== "success" || accountResult.data.length === 0) {
+            return res.status(404).json({
+                message: "Account not found",
+                code: "404"
+            });
+        }
+
+        // Validate required fields
+        const dataEntry = [
+            { name: "Account Name", value: account_name },
+            { name: "Account Number", value: account_number },
+            { name: "Account Type", value: account_type },
+            { name: "Status", value: status }
+        ];
+
+        const validationResult = await helper.checkForNullOrEmpty(dataEntry);
+        if (validationResult.status !== "success") {
+            return res.status(400).json({
+                message: validationResult.message,
+                code: "400"
+            });
+        }
+
+        // Data to be updated
+        const accountData = {
+            account_name,
+            account_number,
+            account_type,
+            status,
+            posted_by,
+            updated_at: new Date()
+        };
+
+        // Update the account
+        const result = await helper.dynamicUpdateWithId('account_setups', accountData, accountId);
+        
+        if (result.status === "success") {
+            return res.status(200).json({
+                message: "Account updated successfully",
+                code: "200"
+            });
+        } else {
+            return res.status(400).json({
+                message: "Failed to update account",
+                code: "400"
+            });
+        }
+
+    } catch (error) {
+        console.error("Error in updateAccount:", error);
+        return res.status(500).json({
+            message: "Failed to update account",
+            error: error.message,
+            code: "500"
+        });
+    }
+};
+
 module.exports = {
 	getAllAccounts,
+  getAllActiveAccounts,
     testSpeed,
-    createAccount
+    createAccount,
+    updateAccount
 	// other controller functions if any
 };
