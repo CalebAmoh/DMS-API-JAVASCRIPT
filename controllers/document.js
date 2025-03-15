@@ -142,8 +142,10 @@ const getDocById = async (req,res) => {
         if(docDetails.status === "success"){
             expense_details_query = `SELECT * FROM account_setups where id = ?;`
             const expenseDetails = await helper.selectRecordsWithQuery(expense_details_query,[docDetails.data[0].doctype_id]);
-
-            res.status(200).json({result:docDetails.data,expense_details:expenseDetails.data[0], code:"200"})
+            if(!expenseDetails.data[0]){
+                return res.status(200).json({result:docDetails.data,expense_details:null, code:"200"})
+            }
+            return res.status(200).json({result:docDetails.data,expense_details:expenseDetails.data[0], code:"200"})
         }else{
             res.status(404).json({result:docDetails.message, code:"404"})
         }

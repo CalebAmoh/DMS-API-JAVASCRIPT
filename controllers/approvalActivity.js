@@ -226,8 +226,10 @@ const getPendingDocs = async (req, res) => {
  */
 const approveDoc = async (req, res) => {
   try {
-        const { docId, userId, recommended_amount, remarks,db_account,cr_account,trans_type } = req.body.data;
+        const { docId, userId, recommended_amount,requested_amount, remarks,db_account,cr_account,trans_type } = req.body.data;
         
+        console.log("recommended_amount",recommended_amount)
+        console.log("recommended_amount",requested_amount)
         // Validate required parameters
         if (!docId || !userId) {
           return res.status(400).json({
@@ -299,7 +301,7 @@ const approveDoc = async (req, res) => {
         //increment the approval stage if the required number of approvers have approved the document
         console.log("countApprovedApprovers",countApprovedApprovers+1);
         console.log("quorum",quorum);
-        
+
         const willCompleteStage = (countApprovedApprovers + 1) >= quorum;
         console.log("willCompleteStage",willCompleteStage);
         const newApprovalStage = willCompleteStage ? approvalStage + 1 : approvalStage; //if the stage is complete, increment the stage
@@ -329,6 +331,8 @@ const approveDoc = async (req, res) => {
             // const updateDocQuery = `UPDATE request_documents SET status = ?, approval_stage = ?, current_approvers = ?, is_required_approvers_left = ? WHERE id = ?`;
             const documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft};
             const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
+
+            updateDocResult.status === "success" ? res.status(200).json({message:"Document approved successfully",code:"200"}) :res.status(200).json({message:"Failed to approve document",code:"200"})
           }
         }
 
@@ -358,13 +362,21 @@ const approveDoc = async (req, res) => {
                 const ref_no = generateDocRef(); //reference for document
                 const trans_ref = generateTransRef(); //reference for transaction
                 const currency = "SLE";
-                console.log("this is the trans ref", trans_ref)
+               
+                let amount = null;
+                if(recommended_amount){
+                   amount = recommended_amount
+                   console.log("this is true")
+                  }else{
+                    amount = requested_amount
+                    console.log("this is false")
+                  }
                 const data = JSON.stringify({
                   "approvedBy": userId,
                   "channelCode": "HRP",
                   "transType": "SAL",
                   "debitAccounts": [{
-                    "debitAmount": recommended_amount,
+                    "debitAmount": amount,
                     "debitAccount": db_account,
                     "debitCurrency": currency,
                     "debitNarration": "Debit for "+trans_type,
@@ -372,7 +384,7 @@ const approveDoc = async (req, res) => {
                     "debitBranch":"000"
                   }],
                   "creditAccounts": [{
-                    "creditAmount": recommended_amount,
+                    "creditAmount": amount,
                     "creditAccount": cr_account,
                     "creditCurrency": currency,
                     "creditNarration": "Credit for "+trans_type,
@@ -449,7 +461,7 @@ const approveDoc = async (req, res) => {
                   // const updateDocQuery = `UPDATE request_documents SET status = ?, approval_stage = ?, current_approvers = ?, is_required_approvers_left = ? WHERE id = ?`;
                   const documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft};
                   const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
-                  updateDocResult.status === "success" ? res.status(200).json({message:"Document approved successfully",code:"200"}): res.status(400).json({message:"Failed to update document status",code:"400"})
+                  updateDocResult.status === "success" ? res.status(200).json({message:"Document fully approved successfully",code:"200"}): res.status(400).json({message:"Failed to update document status",code:"400"})
                 }
               }
             
@@ -536,11 +548,12 @@ const rejectDoc = async (req, res) => {
           const updateDocQuery = `
             UPDATE request_documents 
             SET status = 'REJECTED',
+                decline_reason = ?,
                 current_approvers = 0,
                 is_required_approvers_left = 0
             WHERE id = ?`;
 
-          connection.query(updateDocQuery, [docId], (err, updateResult) => {
+          connection.query(updateDocQuery, [remarks,docId], (err, updateResult) => {
             connection.release();
             
             if(err) {
