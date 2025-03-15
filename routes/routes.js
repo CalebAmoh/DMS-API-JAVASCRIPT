@@ -47,16 +47,22 @@ router.get("/get-parameters", parameterController.getParameters);
 router.get("/get-code-creation-details:codeId", parameterController.getCodeDetails);
 router.get("/get-doc-types", parameterController.getDoctypes);
 router.get("/get-available-doc-types", parameterController.getAvailableDoctypes);
+router.get("/get-doctype-with-approval-setup", parameterController.getDoctypesWithApprovalSetups);
+router.post("/add-doc-type", parameterController.addDoctype);
+router.put("/update-doc-type", parameterController.updateDoctype);
 
 //approver setups
 router.get("/get-approver-setups", approverSetupController.getApproverSetups);
 router.get("/get-approver-users", approverSetupController.getApproverUsers);
+router.post("/create-doc-approvers-setup", approverSetupController.createApproverSetup);
+router.put("/update-doc-approvers-setup", approverSetupController.updateApproverSetup);
 
 //approval activity routes
 router.get("/get-submitted-docs", approvalActivityController.getSubmittedDocs);
 router.post("/get-pending-docs", approvalActivityController.getPendingDocs);
 router.put("/approve-doc", approvalActivityController.approveDoc);
 router.put("/reject-doc", approvalActivityController.rejectDoc);
+
 
 //document routes
 router.post("/generate-doc", documentController.generateDoc)
@@ -70,6 +76,7 @@ router.get("/get-dashbaord-stats", dashboardController.getDashboardValues);
 
 //account routes
 router.get("/get-all-accounts", accountController.getAllAccounts);
+router.post("/add-account", accountController.createAccount);
 
 router.all("*", (req, res) => {
 	res.status(403).json({ code: "404", message: "route not found" });

@@ -298,6 +298,8 @@ const approveDoc = async (req, res) => {
 
         //increment the approval stage if the required number of approvers have approved the document
         console.log("countApprovedApprovers",countApprovedApprovers+1);
+        console.log("quorum",quorum);
+        
         const willCompleteStage = (countApprovedApprovers + 1) >= quorum;
         console.log("willCompleteStage",willCompleteStage);
         const newApprovalStage = willCompleteStage ? approvalStage + 1 : approvalStage; //if the stage is complete, increment the stage

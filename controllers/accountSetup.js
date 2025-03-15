@@ -7,6 +7,7 @@ const pool = require("../mysqlconfig");
  * 
  * Activities in {
 	* getAllAccounts() - get all accounts,
+  * createAccount() - create accounts
  * }
  ***************************************************************************************************************/
 
@@ -15,6 +16,67 @@ const testSpeed = async (req, res) => {
 	console.log("testing api");
 	res.status(200).json({ result: "ok 1" });
 	// return;
+};
+
+/**
+ * Creates a new account setup
+ * @param {Object} req - Request object containing account details
+ * @param {Object} res - Response object
+ * @returns {Object} JSON response with creation status
+ */
+const createAccount = async (req, res) => {
+    try {
+        const { account_name, account_number, account_type, status, posted_by } = req.body;
+
+        // Validate required fields
+        const dataEntry = [
+            { name: "Account Name", value: account_name },
+            { name: "Account Number", value: account_number },
+            { name: "Account Type", value: account_type },
+            {name: "Status", value: status}
+        ];
+
+        // Check for null or empty values
+        const validationResult = await helper.checkForNullOrEmpty(dataEntry);
+        if (validationResult.status !== "success") {
+            return res.status(400).json({
+                message: validationResult.message,
+                code: "400"
+            });
+        }
+
+        // Data to be inserted
+        const accountData = {
+            account_name,
+            account_number,
+            account_type,
+            status: status || 1, // Default to active if not provided
+            posted_by
+        };
+
+        // Insert the account
+        const result = await helper.dynamicInsert('account_setups', accountData);
+        
+        if (result.status === "success") {
+            return res.status(200).json({
+                message: "Account setup created successfully",
+                code: "200"
+            });
+        } else {
+            return res.status(400).json({
+                message: "Failed to create account setup",
+                code: "400"
+            });
+        }
+
+    } catch (error) {
+        console.error("Error in createAccount:", error);
+        return res.status(500).json({
+            message: "Failed to create setup",
+            error: error.message,
+            code: "500"
+        });
+    }
 };
 
 //returns all accounts
@@ -54,12 +116,9 @@ const getAllAccounts = async (req, res) => {
     }
 };
 
-
-
-
-
 module.exports = {
 	getAllAccounts,
-    testSpeed
+    testSpeed,
+    createAccount
 	// other controller functions if any
 };
