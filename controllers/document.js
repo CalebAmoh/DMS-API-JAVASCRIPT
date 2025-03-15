@@ -8,6 +8,7 @@ require("dotenv").config();
  * Activities include {
 	* generateDoc() - generate a document,
     * getGeneratedDocs() - get all generated documents,
+    * getUserGeneratedDocs() - get all generated documents by the user,
     * getDocById() - get all documents for a user,
     * updateDoc() - update a document,
     * submitDoc() - changes document status to submitted
@@ -69,7 +70,39 @@ const generateDoc = async (req,res) => {
     }
 }
 
+
+
 const getGeneratedDocs = async (req, res) => {
+	try {
+
+        const {userId,role} = req.params
+        console.log("just",req.params);
+
+        let docs= null;
+        if(role !== "admin"){
+            const query = `SELECT  request_documents.*, doctype_details.description AS doctype_name FROM request_documents JOIN code_creation_details AS doctype_details ON request_documents.doctype_id = doctype_details.id AND doctype_details.code_id = 2 WHERE request_documents.posted_by = ?;`;
+            docs = await helper.selectRecordsWithQuery(query,[userId]);
+        }else{
+            const query = `SELECT  request_documents.*, doctype_details.description AS doctype_name FROM request_documents JOIN code_creation_details AS doctype_details ON request_documents.doctype_id = doctype_details.id AND doctype_details.code_id = 2;`;
+            docs = await helper.selectRecordsWithQuery(query);
+        }
+    
+        
+        
+        if(docs.status === "success"){
+            res.status(200).json({result:docs.data, code:"200"})
+        }else{
+            res.status(404).json({result:docs.message, code:"404"})
+        }
+
+	} catch (error) {
+	    console.error("Unexpected error: ", error);
+	    res.status(500).json({ error: "An unexpected error occurred." });
+	}
+};
+
+
+const getUserGeneratedDocs = async (req, res) => {
 	try {
 	  const query = `SELECT  request_documents.*, doctype_details.description AS doctype_name
 						FROM request_documents
@@ -181,6 +214,7 @@ module.exports = {
     generateDoc,
     getDocById,
     getGeneratedDocs,
+    getUserGeneratedDocs,
     updateDoc,
     submitDoc
 }

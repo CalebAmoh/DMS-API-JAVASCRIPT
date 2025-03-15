@@ -68,7 +68,8 @@ router.put("/reject-doc", approvalActivityController.rejectDoc);
 router.post("/generate-doc", documentController.generateDoc)
 router.put("/update-doc:docId", documentController.updateDoc)
 router.get("/get-doc:docId", documentController.getDocById)
-router.get("/get-generated-docs", documentController.getGeneratedDocs);
+router.get("/get-generated-docs/:userId/:role", documentController.getGeneratedDocs);
+router.get("/get-user-generated-docs", documentController.getGeneratedDocs);
 router.put("/submit-doc:docId", documentController.submitDoc);
 
 //dashboard
