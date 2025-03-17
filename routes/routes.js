@@ -73,7 +73,7 @@ router.get("/get-user-generated-docs", documentController.getGeneratedDocs);
 router.put("/submit-doc:docId", documentController.submitDoc);
 
 //dashboard
-router.get("/get-dashbaord-stats", dashboardController.getDashboardValues);
+router.get("/get-dashbaord-stats/:userId/:role", dashboardController.getAdminDashboardValues);
 
 //account routes
 router.get("/get-all-accounts", accountController.getAllAccounts);
