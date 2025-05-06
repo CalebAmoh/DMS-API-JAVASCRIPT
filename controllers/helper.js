@@ -191,7 +191,8 @@ const selectRecordsWithCondition = async (tableName, columns) => {
 					console.error("Error getting connection from pool:", err);
 					reject({
 						status: "error",
-						message: "Database connection failed"
+						message: "Database connection failed",
+						data:[]
 					});
 					return;
 				}
@@ -202,7 +203,8 @@ const selectRecordsWithCondition = async (tableName, columns) => {
 						console.error("Error executing query:", err);
 						reject({
 							status: "error",
-							message: "Failed to check unique value"
+							message: "Failed to check unique value",
+							data:[]
 						});
 						return;
 					}
@@ -211,7 +213,8 @@ const selectRecordsWithCondition = async (tableName, columns) => {
 						connection.release();
 						resolve({
 							status: "error",
-							message: "No data found"
+							message: "No data found",
+							data:[]
 						});
 					} else {
 
@@ -487,7 +490,8 @@ const selectRecordsWithQuery = async (query, params = []) => {
 						reject({
 							status: "error",
 							message: "Failed to execute query",
-							error: err.message
+							error: err.message,
+							data:[]
 						});
 						return;
 					}

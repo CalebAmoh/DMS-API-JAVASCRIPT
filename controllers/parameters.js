@@ -3,6 +3,7 @@ require("dotenv").config();
 const documentTypesCollection = "code_creation_details";
 const usersCollection = "users";
 const pool = require("../mysqlconfig")
+const documentColors = ["#3a7bd5", "#4ca1af", "#516395", "#49a09d"];
 
 /***********************************************************************************************************
  * handles all parameter creation and all parameter related activity in the app
@@ -174,15 +175,15 @@ const getDoctypesWithApprovalSetups = async(req, res) => {
 
 //add document type
 const addDoctype = async (req, res) => {
-	try{
-		const {description,status,trans_type,expense_code,posted_by} = req.body;
+	try {
+		const { description, status, trans_type, expense_code, posted_by } = req.body;
 
-		//required data
+		// Required data
 		const dataEntry = [
-			{name:"Description", value:description},
-			{name:"Status", value:status},
-			{name:"Transaction type", value:trans_type},
-			{name:"USer", value:posted_by}
+			{ name: "Description", value: description },
+			{ name: "Status", value: status },
+			{ name: "Transaction type", value: trans_type },
+			{ name: "User", value: posted_by }
 		];
 
 		// Check for null or empty values from data entry
@@ -191,45 +192,46 @@ const addDoctype = async (req, res) => {
 			return res.status(203).json({ result: result.message, code: "203" });
 		}
 
-		//check if document type already exists
-		const doctype = await helper.selectRecordsWithCondition(documentTypesCollection, [{description:description}]);
-		if(doctype.status === "success"){
-			return res.status(400).json({message:"Document type already exists", code:"400"})
+		// Check if document type already exists
+		const doctype = await helper.selectRecordsWithCondition(documentTypesCollection, [{ description: description }]);
+		if (doctype.status === "success") {
+			return res.status(400).json({ message: "Document type already exists", code: "400" });
 		}
 
-		//data to be inserted
+		// Data to be inserted
 		const data = {
 			description: description,
 			status,
 			trans_type,
 			code_id: 2,
 			expense_code,
-			posted_by
-		}
+			posted_by,
+			color_code: generateRandomColor() // Assign a newly generated color
+		};
 
-		//insert data into the database
+		// Insert data into the database
 		const insertDoctype = await helper.dynamicInsert(documentTypesCollection, data);
-		if(insertDoctype.status === "success"){
-			res.status(200).json({message:"Document type added successfully", code:"200"})
-		}else{
-			res.status(400).json({message:insertDoctype.message, code:"400"})
+		if (insertDoctype.status === "success") {
+			res.status(200).json({ message: "Document type added successfully", code: "200" });
+		} else {
+			res.status(400).json({ message: insertDoctype.message, code: "400" });
 		}
-	}catch(error){
+	} catch (error) {
 		console.log(error);
-		res.status(500).json({message: "Failed to add document type", code: "500"});
+		res.status(500).json({ message: "Failed to add document type", code: "500" });
 	}
-}
+};
 
 //update the document type
 const updateDoctype = async (req, res) => {
-	try{
-		const {description,trans_type,status,expense_code,id,posted_by} = req.body;
+	try {
+		const { description, trans_type, status, expense_code, id, posted_by } = req.body;
 
-		dataEntry = [
-			{name:"Description", value:description},
-			{name:"Transaction type", value:trans_type},
-			{name:"Status", value:status},
-		]
+		const dataEntry = [
+			{ name: "Description", value: description },
+			{ name: "Transaction type", value: trans_type },
+			{ name: "Status", value: status },
+		];
 
 		// Check for null or empty values from data entry
 		const result = await helper.checkForNullOrEmpty(dataEntry);
@@ -237,32 +239,40 @@ const updateDoctype = async (req, res) => {
 			return res.status(203).json({ message: result.message, code: "203" });
 		}
 
-		//check if document type already exists
-		const doctype = await helper.selectRecordsWithCondition(documentTypesCollection, [{id:id}]);
-		if(doctype.status !== "success"){
-			return res.status(404).json({message:"Document type does not exist", code:"404"})
+		// Check if document type already exists
+		const doctype = await helper.selectRecordsWithCondition(documentTypesCollection, [{ id: id }]);
+		if (doctype.status !== "success") {
+			return res.status(404).json({ message: "Document type does not exist", code: "404" });
 		}
 
-		//data to be inserted
+		// Data to be updated
 		const data = {
 			description,
 			status,
 			trans_type,
 			expense_code,
 			posted_by,
-			code_id:2
-		}
+			code_id: 2,
+			// color: generateRandomColor() // Assign a newly generated color
+		};
 
-		//update record
-		const updateDocType = await helper.dynamicUpdateWithId(documentTypesCollection,data,id);
-		updateDocType.status === "success" ? res.status(200).json({message:"Document updated successfully", code:"200"}):res.status(203).json({message:"Failed to update document",code:"203"});
-	}catch(error){
+		// Update record
+		const updateDocType = await helper.dynamicUpdateWithId(documentTypesCollection, data, id);
+		updateDocType.status === "success" ? res.status(200).json({ message: "Document updated successfully", code: "200" }) : res.status(203).json({ message: "Failed to update document", code: "203" });
+	} catch (error) {
 		console.log(error);
-		res.status(500).json({message: "Failed to update document type", code: "500"});
+		res.status(500).json({ message: "Failed to update document type", code: "500" });
 	}
-}
+};
 
-
+/**
+ * Generates a random color in hexadecimal format
+ * @returns {string} Hexadecimal color code
+ */
+const generateRandomColor = () => {
+    const randomColor = Math.floor(Math.random() * 16777215).toString(16);
+    return `#${randomColor.padStart(6, '0')}`; // Ensure it's 6 digits
+};
 
 module.exports = {
 	getDoctypes,

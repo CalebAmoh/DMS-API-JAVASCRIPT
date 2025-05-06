@@ -20,7 +20,7 @@ require("dotenv").config();
 //generate a document
 const generateDoc = async (req,res) => {
     try  {
-        const {doctype_id,requested_amount,customer_number,details,doc_id,user_id} = req.body;
+        const {doctype_id,requested_amount,customer_number,customer_desc,details,doc_id,user_id} = req.body;
 
         //pass data entry into array
         const dataEntry = [
@@ -46,6 +46,7 @@ const generateDoc = async (req,res) => {
                 doctype_id: doctype_id,
                 requested_amount: requested_amount,
                 customer_no: customer_number,
+                customer_desc: customer_desc,
                 details: details,
                 doc_id: doc_id,
                 posted_by: user_id,
@@ -159,7 +160,7 @@ const getDocById = async (req,res) => {
 //update document
 const updateDoc = async (req,res) => {
     try{
-        const {doctype_id,requested_amount,customer_number,details,doc_id,user_id} = req.body;
+        const {doctype_id,requested_amount,customer_number,customer_desc,details,doc_id,user_id} = req.body;
         const dataEntry = [
             { name: "Document type", value: doctype_id },
             // { name: "Requested amount", value: requested_amount },
@@ -176,6 +177,7 @@ const updateDoc = async (req,res) => {
                 doctype_id: doctype_id,
                 requested_amount: requested_amount,
                 customer_no: customer_number,
+                customer_desc: customer_desc,
                 details: details,
                 doc_id: doc_id,
                 posted_by: user_id

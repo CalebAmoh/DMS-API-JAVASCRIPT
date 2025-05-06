@@ -7,6 +7,7 @@ const connection = require("../mysqlconfig");
 const newsCollection = "news";
 const messageCollection = "messages";
 
+
 /***********************************************************************************************************
  * handles all approver setups and all related activity in the app
  * 

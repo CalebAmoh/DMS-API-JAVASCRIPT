@@ -89,11 +89,11 @@ const getSubmittedDocs = async (req, res) => {
  */
 const getPendingDocs = async (req, res) => {
 	try {
-		const {userId} = req.body;
+		const {role,userId} = req.body;
 		const status_approved = STATUS.APPROVED;
 		const status_draft = STATUS.DRAFT;
 
-    console.log("checking user id", userId);
+    // console.log("checking user id", role[0]);
 		
     // const query = `
     //   SELECT DISTINCT rd.*, doctype_details.description AS doctype_name
@@ -128,8 +128,10 @@ const getPendingDocs = async (req, res) => {
 
     // AND aa.id IS NULL;
     // Get a connection from the pool
-    
-    const query = `
+    let query = "";
+    if(role[0] === "approver"){
+      console.log("checking user id 1", role[0]);
+          query = `
 
       SELECT DISTINCT rd.*, doctype_details.description AS doctype_name
 
@@ -173,17 +175,11 @@ const getPendingDocs = async (req, res) => {
 
           /* Show if user is mandatory approver regardless of is_required_approvers_left */
 
-          da.is_mandatory = 1
-
-          OR 
-
-          /* Show if user is non-mandatory approver AND required approvers are not left */
-
-          (da.is_mandatory = 0 AND rd.is_required_approvers_left = 0)
-
-        )`;
-
-    
+          da.is_mandatory = 1 OR /* Show if user is non-mandatory approver AND required approvers are not left */ (da.is_mandatory = 0 AND rd.is_required_approvers_left = 0))`;
+    }else{
+      console.log("checking user id", role[0]);
+          query = `SELECT DISTINCT rd.*, doctype_details.description AS doctype_name FROM request_documents rd JOIN code_creation_details AS doctype_details ON rd.doctype_id = doctype_details.id AND doctype_details.code_id = 2 INNER JOIN doc_approvers da ON da.doctype_id = rd.doctype_id WHERE rd.status = '${status_approved}' and rd.requested_amount != '' and rd.batch_no is null`
+    }
     pool.getConnection((err, connection) => {
       if (err) {
         console.error("Error getting connection from pool: ", err);
@@ -218,6 +214,34 @@ const getPendingDocs = async (req, res) => {
 	}
 };
 
+
+/**
+ * Returns all pending documents
+ * @param {Object} req - Request object userId
+ * @param {Object} res - Response object
+ * @returns {Object} JSON response with approval comments
+ */
+const getApprovalComments = async (req, res) => {
+	try {
+		  const docId = req.params.docId;
+      const query = `select a.id as activity_id,CONCAT(u.first_name," ",u.last_name) approver,comment from approval_activities a JOIN users u ON a.approved_by = u.id where a.doc_id = ?`;
+
+      //execute the query
+      const commentsResults = await helper.selectRecordsWithQuery(query, [docId]);
+      res.status(200).json({
+        comments: commentsResults.data,
+        code: "200"
+      });
+    
+	} catch (error) {
+		console.error("Error in getPendingDocs:", error);  // Improved error message
+		res.status(500).json({
+			message: "An unexpected error occurred",
+			code: "500"
+		});
+	}
+};
+
 /**
  * Approves a document based on its ID and updates approval status
  * @param {Object} req - Request object containing docId, userId,recommended_amount and remarks
@@ -226,7 +250,7 @@ const getPendingDocs = async (req, res) => {
  */
 const approveDoc = async (req, res) => {
   try {
-        const { docId, userId, recommended_amount,requested_amount, remarks,db_account,cr_account,trans_type } = req.body.data;
+        const { docId, userId, recommended_amount,requested_amount, remarks,db_account,cr_account,trans_type,customerDesc } = req.body.data;
         
         console.log("recommended_amount",recommended_amount)
         console.log("recommended_amount",requested_amount)
@@ -237,6 +261,10 @@ const approveDoc = async (req, res) => {
             code: "400"
           });
         }
+
+        //update request_documents table with customer description and customer number
+        const documentData_ = {customer_desc: customerDesc,customer_no:cr_account};
+        const updateDocRequestResult = await helper.dynamicUpdateWithId(documentCollection,documentData_,docId);
 
         // First query to get current document status and approval stage
         const getDocQuery = `SELECT rd.current_approvers,rd.doctype_id,rd.status, rd.approval_stage,count(a.doctype_id) max_approval_level FROM request_documents rd join doc_approval_setups a ON a.doctype_id = rd.doctype_id WHERE rd.id = ?`;
@@ -327,9 +355,13 @@ const approveDoc = async (req, res) => {
           const approvalResult = await helper.dynamicInsert(approvalActivityCollection, approvalActivityData);
 
           if(approvalResult.status === "success"){
-            //update the documents details
+            //update the documents details1
             // const updateDocQuery = `UPDATE request_documents SET status = ?, approval_stage = ?, current_approvers = ?, is_required_approvers_left = ? WHERE id = ?`;
-            const documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft};
+            if(recommended_amount){
+              documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft,approved_amount:recommended_amount};
+            }else{
+              documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft};
+            }
             const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
 
             updateDocResult.status === "success" ? res.status(200).json({message:"Document approved successfully",code:"200"}) :res.status(200).json({message:"Failed to approve document",code:"200"})
@@ -339,118 +371,118 @@ const approveDoc = async (req, res) => {
         //check if the document is fully approved
         if(isFullyApproved){
               
-              if(db_account){
+              // if(db_account){
                
-                //for generating document reference
-                const generateDocRef = () => {
-                  const randomStr = Math.random().toString(36).substring(2, 15);
-                  const timestamp = Date.now();
-                  return randomStr.substr(0, 2) + timestamp;
-                };
+              //   //for generating document reference
+              //   const generateDocRef = () => {
+              //     const randomStr = Math.random().toString(36).substring(2, 15);
+              //     const timestamp = Date.now();
+              //     return randomStr.substr(0, 2) + timestamp;
+              //   };
 
-                const generateTransRef = () => {
+              //   const generateTransRef = () => {
 
-                  // Similar to PHP's rand(), generates random integer between min and max
-                  const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-                  const randomStr = Math.random().toString(36).substring(2, 8); //get random string 
-                  const timestamp = Date.now();
-                  const randomNum = rand(10, 99); // Add random 4-digit number
-                  return randomStr.substr(0, 2) + timestamp + randomNum;
+              //     // Similar to PHP's rand(), generates random integer between min and max
+              //     const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+              //     const randomStr = Math.random().toString(36).substring(2, 8); //get random string 
+              //     const timestamp = Date.now();
+              //     const randomNum = rand(10, 99); // Add random 4-digit number
+              //     return randomStr.substr(0, 2) + timestamp + randomNum;
 
-                };
+              //   };
 
-                const ref_no = generateDocRef(); //reference for document
-                const trans_ref = generateTransRef(); //reference for transaction
-                const currency = "SLE";
+              //   const ref_no = generateDocRef(); //reference for document
+              //   const trans_ref = generateTransRef(); //reference for transaction
+              //   const currency = "SLE";
                
-                let amount = null;
-                if(recommended_amount){
-                   amount = recommended_amount
-                   console.log("this is true")
-                  }else{
-                    amount = requested_amount
-                    console.log("this is false")
-                  }
-                const data = JSON.stringify({
-                  "approvedBy": userId,
-                  "channelCode": "HRP",
-                  "transType": "SAL",
-                  "debitAccounts": [{
-                    "debitAmount": amount,
-                    "debitAccount": db_account,
-                    "debitCurrency": currency,
-                    "debitNarration": "Debit for "+trans_type,
-                    "debitProdRef": "NS_"+trans_ref,
-                    "debitBranch":"000"
-                  }],
-                  "creditAccounts": [{
-                    "creditAmount": amount,
-                    "creditAccount": cr_account,
-                    "creditCurrency": currency,
-                    "creditNarration": "Credit for "+trans_type,
-                    "creditProdRef": "BS_"+trans_ref,
-                    "creditBranch": "000"
-                  }],
-                  "referenceNo": ref_no,
-                  "postedBy": userId
-                })
+              //   let amount = null;
+              //   if(recommended_amount){
+              //      amount = recommended_amount
+              //      console.log("this is true")
+              //     }else{
+              //       amount = requested_amount
+              //       console.log("this is false")
+              //     }
+              //   const data = JSON.stringify({
+              //     "approvedBy": userId,
+              //     "channelCode": "HRP",
+              //     "transType": "SAL",
+              //     "debitAccounts": [{
+              //       "debitAmount": amount,
+              //       "debitAccount": db_account,
+              //       "debitCurrency": currency,
+              //       "debitNarration": "Debit for "+trans_type,
+              //       "debitProdRef": "NS_"+trans_ref,
+              //       "debitBranch":"000"
+              //     }],
+              //     "creditAccounts": [{
+              //       "creditAmount": amount,
+              //       "creditAccount": cr_account,
+              //       "creditCurrency": currency,
+              //       "creditNarration": "Credit for "+trans_type,
+              //       "creditProdRef": "BS_"+trans_ref,
+              //       "creditBranch": "000"
+              //     }],
+              //     "referenceNo": ref_no,
+              //     "postedBy": userId
+              //   })
 
 
-                let config = {
-                  method: 'put',
-                  maxBodyLength: Infinity,
-                  url: 'http://10.203.14.16:8384/core/api/v1.0/account/performBulkPayment',
-                  headers: { 
-                    'x-api-key': '20171411891', 
-                    'x-api-secret': '141116517P', 
-                    'Content-Type': 'application/json', 
-                    'X-FORWARDED-FOR': '172.16.10.1', 
-                    'Authorization': 'rererer'
-                  },
-                  timeout: 30000, // 30 seconds timeout
-                  data : data
-                };
+              //   let config = {
+              //     method: 'put',
+              //     maxBodyLength: Infinity,
+              //     url: 'http://10.203.14.16:8384/core/api/v1.0/account/performBulkPayment',
+              //     headers: { 
+              //       'x-api-key': '20171411891', 
+              //       'x-api-secret': '141116517P', 
+              //       'Content-Type': 'application/json', 
+              //       'X-FORWARDED-FOR': '172.16.10.1', 
+              //       'Authorization': 'rererer'
+              //     },
+              //     timeout: 30000, // 30 seconds timeout
+              //     data : data
+              //   };
 
-                axios.request(config)
-                .then(async(response) => {
-                  if(response.data.responseCode === "000"){
+              //   axios.request(config)
+              //   .then(async(response) => {
+              //     if(response.data.responseCode === "000"){
                     
-                    // Modified approval query to include approval_stage
-                    // const approvalQuery = `INSERT INTO approval_activities (doc_id, approved_by, comment, approval_stage) VALUES (?, ?, ?, ?)`;
-                    const approvalActivityData = {doc_id: docId, approved_by: userId, comment: remarks, approval_stage: approvalStage};
-                    const approvalResult = await helper.dynamicInsert(approvalActivityCollection, approvalActivityData);
+              //       // Modified approval query to include approval_stage
+              //       // const approvalQuery = `INSERT INTO approval_activities (doc_id, approved_by, comment, approval_stage) VALUES (?, ?, ?, ?)`;
+              //       const approvalActivityData = {doc_id: docId, approved_by: userId, comment: remarks, approval_stage: approvalStage};
+              //       const approvalResult = await helper.dynamicInsert(approvalActivityCollection, approvalActivityData);
 
-                    if(approvalResult.status === "success"){
-                      //update the documents details
-                      // const updateDocQuery = `UPDATE request_documents SET status = ?, approval_stage = ?, current_approvers = ?, is_required_approvers_left = ? WHERE id = ?`;
-                      const documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft,batch_no:ref_no,is_transaction_failed: false,};
-                      const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
-                      updateDocResult.status === "success" ? res.status(200).json({message:"Document approved successfully",code:"200"}) : res.status(400).json({message:"Failed to update document status, after successful transaction",code:"400"})
-                    }
-                  } else {
-                    const documentData = {
-                      status: newStatus, 
-                      approval_stage: newApprovalStage, 
-                      current_approvers: current_approvers, 
-                      is_required_approvers_left: isRequiredApproversLeft,
-                      is_transaction_failed: true
-                    };
-                    const updateResult = await helper.dynamicUpdateWithId(documentCollection, documentData, docId);
-                    res.status(400).json({message:"Transaction failed, please try again",code:"200"})
-                  }
-                })
-                .catch((error) => {
-                  console.error("Transaction error:", error.code === 'ECONNABORTED' ? 'Request timeout' : error.message);
-                  // connection.release();
-                  res.status(500).json({
-                    message: error.code === 'ECONNABORTED' ? 
-                      "Transaction timed out after 30 seconds, try again or contact adminstrator" : 
-                      "Transaction processing failed, try again or contact adminstrator",
-                    code: "500"
-                  });
-                });
+              //       if(approvalResult.status === "success"){
+              //         //update the documents details
+              //         // const updateDocQuery = `UPDATE request_documents SET status = ?, approval_stage = ?, current_approvers = ?, is_required_approvers_left = ? WHERE id = ?`;
+              //         const documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft,batch_no:ref_no,is_transaction_failed: false,};
+              //         const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
+              //         updateDocResult.status === "success" ? res.status(200).json({message:"Document approved successfully",code:"200"}) : res.status(400).json({message:"Failed to update document status, after successful transaction",code:"400"})
+              //       }
+              //     } else {
+              //       const documentData = {
+              //         status: newStatus, 
+              //         approval_stage: newApprovalStage, 
+              //         current_approvers: current_approvers, 
+              //         is_required_approvers_left: isRequiredApproversLeft,
+              //         is_transaction_failed: true
+              //       };
+              //       const updateResult = await helper.dynamicUpdateWithId(documentCollection, documentData, docId);
+              //       res.status(400).json({message:"Transaction failed, please try again",code:"200"})
+              //     }
+              //   })
+              //   .catch((error) => {
+              //     console.error("Transaction error:", error.code === 'ECONNABORTED' ? 'Request timeout' : error.message);
+              //     // connection.release();
+              //     res.status(500).json({
+              //       message: error.code === 'ECONNABORTED' ? 
+              //         "Transaction timed out after 30 seconds, try again or contact adminstrator" : 
+              //         "Transaction processing failed, try again or contact adminstrator",
+              //       code: "500"
+              //     });
+              //   });
 
-              }else{
+              // }else{
                 // Modified approval query to include approval_stage
                 // const approvalQuery = `INSERT INTO approval_activities (doc_id, approved_by, comment, approval_stage) VALUES (?, ?, ?, ?)`;
                 const approvalActivityData = {doc_id: docId, approved_by: userId, comment: remarks, approval_stage: approvalStage};
@@ -459,11 +491,15 @@ const approveDoc = async (req, res) => {
                 if(approvalResult.status === "success"){
                   //update the documents details
                   // const updateDocQuery = `UPDATE request_documents SET status = ?, approval_stage = ?, current_approvers = ?, is_required_approvers_left = ? WHERE id = ?`;
-                  const documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft};
+                  if(recommended_amount){
+                    documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft,approved_amount:recommended_amount};
+                  }else{
+                    documentData = {status: newStatus, approval_stage: newApprovalStage, current_approvers: current_approvers, is_required_approvers_left: isRequiredApproversLeft};
+                  }
                   const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
                   updateDocResult.status === "success" ? res.status(200).json({message:"Document fully approved successfully",code:"200"}): res.status(400).json({message:"Failed to update document status",code:"400"})
                 }
-              }
+              // }
             
         }
     
@@ -475,6 +511,131 @@ const approveDoc = async (req, res) => {
     });
   }
 }
+
+
+/**
+ * Credits and Debits accounts involved in a transaction
+ * @param {Object} req - Request object containing docId, userId,recommended_amount and remarks
+ * @param {Object} res - Response object
+ * @returns {Object} JSON response with approval status
+ */
+const makeTransaction = async (req, res) => {
+  try {
+
+        const { docId, userId, recommended_amount,requested_amount, remarks,db_account,cr_account,trans_type } = req.body.data;
+        
+        //for generating document reference
+        const generateDocRef = () => {
+          const randomStr = Math.random().toString(36).substring(2, 15);
+          const timestamp = Date.now();
+          return randomStr.substr(0, 2) + timestamp;
+        };
+
+        const generateTransRef = () => {
+
+          // Similar to PHP's rand(), generates random integer between min and max
+          const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+          const randomStr = Math.random().toString(36).substring(2, 8); //get random string 
+          const timestamp = Date.now();
+          const randomNum = rand(10, 99); // Add random 4-digit number
+          return randomStr.substr(0, 2) + timestamp + randomNum;
+
+        };
+
+        const ref_no = generateDocRef(); //reference for document
+        const trans_ref = generateTransRef(); //reference for transaction
+        const currency = "SLE";
+        console.log(ref_no)
+        let amount = null;
+        if(recommended_amount){
+            amount = recommended_amount
+            console.log("this is true")
+          }else{
+            amount = requested_amount
+            console.log("this is false")
+          }
+        const data = JSON.stringify({
+          "approvedBy": userId,
+          "channelCode": "HRP",
+          "transType": "SAL",
+          "debitAccounts": [{
+            "debitAmount": amount,
+            "debitAccount": db_account,
+            "debitCurrency": currency,
+            "debitNarration": "Debit for "+trans_type,
+            "debitProdRef": "NS_"+trans_ref,
+            "debitBranch":"000"
+          }],
+          "creditAccounts": [{
+            "creditAmount": amount,
+            "creditAccount": cr_account,
+            "creditCurrency": currency,
+            "creditNarration": "Credit for "+trans_type,
+            "creditProdRef": "BS_"+trans_ref,
+            "creditBranch": "000"
+          }],
+          "referenceNo": ref_no,
+          "postedBy": userId
+        })
+
+        console.log(ref_no)
+        let config = {
+          method: 'put',
+          maxBodyLength: Infinity,
+          url: 'http://10.203.14.16:8384/core/api/v1.0/account/performBulkPayment',
+          headers: { 
+            'x-api-key': '20171411891', 
+            'x-api-secret': '141116517P', 
+            'Content-Type': 'application/json', 
+            'X-FORWARDED-FOR': '172.16.10.1', 
+            'Authorization': 'rererer'
+          },
+          timeout: 30000, // 30 seconds timeout
+          data : data
+        };
+
+        axios.request(config)
+        .then(async(response) => {
+          console.log(response.data.responseCode)
+          if(response.data.responseCode === "000"){
+            
+          //   // Modified approval query to include approval_stage
+          //   // const approvalQuery = `INSERT INTO approval_activities (doc_id, approved_by, comment, approval_stage) VALUES (?, ?, ?, ?)`;
+          //   // const approvalActivityData = {doc_id: docId, approved_by: userId, comment: remarks, approval_stage: approvalStage};
+          //   // const approvalResult = await helper.dynamicInsert(approvalActivityCollection, approvalActivityData);
+          console.log(ref_no)
+          //   // if(approvalResult.status === "success"){
+              //update the documents details
+              const updateDocQuery = `UPDATE request_documents SET status = ? WHERE id = ?`;
+              const documentData = {status: "PAID",batch_no:ref_no,is_transaction_failed: false,};
+              const updateDocResult = await helper.dynamicUpdateWithId(documentCollection,documentData,docId);
+              updateDocResult.status === "success" ? res.status(200).json({message:"Document approved successfully",code:"200"}) : res.status(400).json({message:"Failed to update document status, after successful transaction",code:"400"})
+          //   // }
+          } else {
+            res.status(400).json({message:"Transaction failed, please try again",code:"200"})
+          }
+        })
+        .catch((error) => {
+          console.error("Transaction error:", error.code === 'ECONNABORTED' ? 'Request timeout' : error.message);
+          // connection.release();
+          res.status(500).json({
+            message: error.code === 'ECONNABORTED' ? 
+              "Transaction timed out after 30 seconds, try again or contact adminstrator" : 
+              "Transaction processing failed, try again or contact adminstrator",
+            code: "500"
+          });
+        });
+
+    
+  }catch (error) {
+    console.error("Unexpected error in approveDoc:", error);
+    res.status(500).json({
+      message: "An unexpected error occurred",
+      code: "500"
+    });
+  }
+}
+
 
 /**
  * Rejects a document based on its ID and updates approval status
@@ -584,8 +745,10 @@ const rejectDoc = async (req, res) => {
 module.exports = {
 	getSubmittedDocs,
   getPendingDocs,
+  getApprovalComments,
   approveDoc,
   rejectDoc,
+  makeTransaction,
   testSpeed
 	// other controller functions if any
 };

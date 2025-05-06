@@ -21,7 +21,7 @@ router.get("/", (req, res) => {
 });
 
 /*******************************************
-* AUTH ROUTES
+ * AUTH ROUTES
 *****************************************/
 //group all user routes together to checkToken
 
@@ -59,8 +59,10 @@ router.put("/update-doc-approvers-setup", approverSetupController.updateApprover
 
 //approval activity routes
 router.get("/get-submitted-docs", approvalActivityController.getSubmittedDocs);
+router.get("/get-approval-comments/:docId", approvalActivityController.getApprovalComments);
 router.post("/get-pending-docs", approvalActivityController.getPendingDocs);
 router.put("/approve-doc", approvalActivityController.approveDoc);
+router.post("/make-transaction", approvalActivityController.makeTransaction);
 router.put("/reject-doc", approvalActivityController.rejectDoc);
 
 
@@ -77,6 +79,7 @@ router.get("/get-dashbaord-stats/:userId/:role", dashboardController.getAdminDas
 
 //account routes
 router.get("/get-all-accounts", accountController.getAllAccounts);
+router.get("/get-expense-accounts", accountController.getExpenseAccounts);
 router.get("/get-all-active-accounts", accountController.getAllActiveAccounts);
 router.post("/add-account", accountController.createAccount);
 router.put("/update-account:accountId", accountController.updateAccount);

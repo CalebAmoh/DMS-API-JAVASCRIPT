@@ -1,6 +1,7 @@
 const helper = require("./helper"); //access helper functions
 require("dotenv").config();
 const pool = require("../mysqlconfig");
+const axios = require("axios"); //for making api calls to core banking
 
 /***********************************************************************************************************
  * handles all approver setups and all related activity in the app
@@ -154,6 +155,44 @@ const getAllActiveAccounts = async (req, res) => {
     }
 };
 
+//returns expense accounts from core banking
+const getExpenseAccounts = async (req, res) => {
+  try{
+      //make a call to core banking api to get all expense accounts
+      let data = '';
+
+      let config = {
+        method: 'get',
+        maxBodyLength: Infinity,
+        url: 'http://10.203.14.16:8384/core/api/v1.0/account/expenseAccounts',
+        headers: { 
+          'x-api-key': '20171411891', 
+          'x-api-secret': '141116517P', 
+          'Content-Type': 'application/json', 
+          'X-FORWARDED-FOR': '172.16.10.1'
+        },
+        data : data
+      };
+
+      axios.request(config)
+      .then((response) => {
+        // console.log(JSON.stringify(response.data));
+        res.status(200).json({
+          expenseAccounts: response.data,
+          code: "200",
+        });
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+
+
+    }catch(error){
+        console.error("Unexpected error: ", error);
+        res.status(500).json({ error: "An unexpected error occurred." });
+    }
+}
+
 /**
  * Updates an existing account setup
  * @param {Object} req - Request object containing account details
@@ -232,6 +271,7 @@ module.exports = {
   getAllActiveAccounts,
     testSpeed,
     createAccount,
-    updateAccount
+    updateAccount,
+    getExpenseAccounts
 	// other controller functions if any
 };

@@ -440,6 +440,7 @@ const getUserRoles = async (req, res) => {
 		const roles = await helper.selectRecordsWithQuery(query);
 
 		if(roles.message = "success"){
+			console.log(roles.data);
 			res.status(200).json({results:roles.data, code:"200"});
 		}else{
 			res.status(203).json({results:roles.message, code:"203"});
